@@ -1,0 +1,41 @@
+{
+  "name": "billing-system",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Billing & Invoice Management System \u2014 Monorepo",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev:server": "npm run dev --workspace=server",
+    "dev:client": "npm run dev --workspace=client",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "test": "npm run test --workspace=server",
+    "lint:client": "npm run lint --workspace=client",
+    "audit": "npm audit --audit-level=moderate",
+    "db:validate": "npm run db:validate --workspace=server",
+    "check": "npm run audit && npm run db:validate && npm run lint:client && npm test && npm run build",
+    "build": "npm run build:server && npm run build:client",
+    "build:server": "npm run build --workspace=server",
+    "build:client": "npm run build --workspace=client",
+    "db:generate": "npm run db:generate --workspace=server",
+    "db:migrate": "npm run db:migrate --workspace=server",
+    "db:seed": "npm run db:seed --workspace=server",
+    "db:studio": "npm run db:studio --workspace=server",
+    "setup:dev": "npm install && npm run db:generate && npm run db:migrate && npm run db:seed",
+    "db:status": "npm run db:status --workspace=server",
+    "db:migrate:prod": "npm run db:migrate:prod --workspace=server"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "allowScripts": {
+    "@prisma/client@5.22.0": true,
+    "@prisma/engines@5.22.0": true,
+    "prisma@5.22.0": true,
+    "axios@1.18.1": true,
+    "recharts@3.9.2": true,
+    "@hookform/resolvers@5.4.0": true
+  }
+}

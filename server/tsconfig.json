@@ -1,0 +1,45 @@
+{
+  "compilerOptions": {
+    /* Language & Target */
+    "target": "ES2022",               
+    "module": "CommonJS",             
+    "lib": ["ES2022"],
+
+    /* Output */
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "sourceMap": true,
+
+    /* Module Resolution */
+    "moduleResolution": "node",
+    "esModuleInterop": true,          
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+
+    /* Type Checking — Production Grade */
+    "strict": true,                   
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "noUncheckedIndexedAccess": true, 
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+
+    /* Quality */
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+
+    /* Path Aliases */
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@config/*": ["src/config/*"],
+      "@modules/*": ["src/modules/*"],
+      "@middleware/*": ["src/middleware/*"],
+      "@services/*": ["src/services/*"],
+      "@utils/*": ["src/utils/*"],
+      "@types/*": ["src/types/*"]
+    }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "prisma/seed.ts"]
+}

@@ -1,0 +1,448 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  EMPLOYEE
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  PARTIALLY_PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  CHECK
+  CREDIT_CARD
+  MOBILE_PAYMENT
+  OTHER
+}
+
+enum ReminderType {
+  BEFORE_DUE
+  ON_DUE
+  AFTER_DUE
+  MANUAL
+}
+
+enum ReminderStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum PermissionScope {
+  ALL
+  OWN
+  SELECTED
+}
+
+enum RecurringFrequency {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+enum RecurringPlanStatus {
+  ACTIVE
+  PAUSED
+  CANCELLED
+  COMPLETED
+}
+
+enum RecurringExecutionStatus {
+  PROCESSING
+  SUCCESS
+  FAILED
+  SKIPPED
+}
+
+// ─── Models ──────────────────────────────────────────────────────────────────
+
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  name         String    @db.VarChar(255)
+  email        String    @unique @db.VarChar(255)
+  passwordHash String    @map("password_hash") @db.VarChar(255)
+  role         Role      @default(EMPLOYEE)
+  rbacRoleId   String?   @map("rbac_role_id") @db.Uuid
+  themePreference String @default("light") @map("theme_preference") @db.VarChar(20)
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  customers      Customer[]
+  invoices       Invoice[] @relation("InvoiceCreatedBy")
+  signedInvoices Invoice[] @relation("InvoiceSignedBy")
+  vatOverrides   Invoice[] @relation("InvoiceVatOverriddenBy")
+  payments       Payment[]
+  reminders      Reminder[]
+  invoiceEmailLogs InvoiceEmailLog[]
+  assignedClients UserClientAssignment[]
+  recurringPlans  RecurringPlan[]
+  rbacRole       RbacRole? @relation(fields: [rbacRoleId], references: [id], onDelete: SetNull)
+
+  @@map("users")
+  @@index([rbacRoleId])
+}
+
+model RbacRole {
+  id          String           @id @default(uuid()) @db.Uuid
+  name        String           @unique @db.VarChar(100)
+  description String?          @db.VarChar(500)
+  isSystem    Boolean          @default(false) @map("is_system")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  users         User[]
+  permissions   RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String           @id @default(uuid()) @db.Uuid
+  key         String           @unique @db.VarChar(120)
+  description String?          @db.VarChar(500)
+  resource    String           @db.VarChar(80)
+  action      String           @db.VarChar(80)
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  roles RolePermission[]
+
+  @@map("permissions")
+  @@index([resource])
+}
+
+model RolePermission {
+  roleId       String     @map("role_id") @db.Uuid
+  permissionId String     @map("permission_id") @db.Uuid
+  scope        PermissionScope @default(ALL)
+  assignedAt   DateTime   @default(now()) @map("assigned_at")
+
+  role       RbacRole   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+  @@index([permissionId])
+}
+
+
+model UserClientAssignment {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  clientId   String   @map("client_id") @db.Uuid
+  assignedAt DateTime @default(now()) @map("assigned_at")
+
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client Customer @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, clientId])
+  @@index([userId])
+  @@index([clientId])
+  @@map("user_client_assignments")
+}
+
+model Customer {
+  id          String   @id @default(uuid()) @db.Uuid
+  createdById String   @map("created_by") @db.Uuid
+  name        String   @db.VarChar(255)
+  email       String   @db.VarChar(255)
+  phone       String?  @db.VarChar(50)
+  company     String?  @db.VarChar(255)
+  address     String?  @db.Text
+  city        String?  @db.VarChar(100)
+  country     String   @default("Morocco") @db.VarChar(100)
+  countryCode String   @default("MA") @map("country_code") @db.VarChar(2)
+  postalCode  String?  @map("postal_code") @db.VarChar(50)
+  taxNumber   String?  @map("tax_number") @db.VarChar(100)
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  createdBy   User      @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  invoices    Invoice[]
+  assignedUsers UserClientAssignment[]
+  recurringPlans RecurringPlan[]
+
+  @@map("customers")
+  @@index([email])
+  @@index([name])
+}
+
+model Invoice {
+  id            String        @id @default(uuid()) @db.Uuid
+  customerId    String        @map("customer_id") @db.Uuid
+  createdById   String        @map("created_by") @db.Uuid
+  invoiceNumber String        @unique @map("invoice_number") @db.VarChar(50)
+  status        InvoiceStatus @default(DRAFT)
+  issueDate     DateTime      @map("issue_date") @db.Date
+  dueDate       DateTime      @map("due_date") @db.Date
+  
+  // Monetary values stored as Decimal to prevent floating point inaccuracies
+  subtotal      Decimal       @db.Decimal(12, 2)
+  taxRate       Decimal       @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  taxAmount     Decimal       @default(0) @map("tax_amount") @db.Decimal(12, 2)
+  customerCountry     String  @default("Morocco") @map("customer_country") @db.VarChar(100)
+  customerCountryCode String  @default("MA") @map("customer_country_code") @db.VarChar(2)
+  vatOverridden       Boolean @default(false) @map("vat_overridden")
+  vatOverrideReason   String? @map("vat_override_reason") @db.VarChar(500)
+  vatOverriddenAt     DateTime? @map("vat_overridden_at")
+  vatOverriddenById   String? @map("vat_overridden_by") @db.Uuid
+  discount      Decimal       @default(0) @db.Decimal(12, 2)
+  total         Decimal       @db.Decimal(12, 2)
+  
+  // Denormalized totals for quick dashboard queries
+  amountPaid    Decimal       @default(0) @map("amount_paid") @db.Decimal(12, 2)
+  balanceDue    Decimal       @map("balance_due") @db.Decimal(12, 2)
+  
+  notes         String?       @db.Text
+  terms         String?       @db.Text
+  currency      String        @default("MAD") @db.VarChar(10)
+  
+  sentAt        DateTime?     @map("sent_at")
+  paidAt        DateTime?     @map("paid_at")
+  isSigned      Boolean       @default(false) @map("is_signed")
+  signedAt      DateTime?     @map("signed_at")
+  signedById    String?       @map("signed_by") @db.Uuid
+  signatureUrl  String?       @map("signature_url") @db.VarChar(500)
+  stampUrl      String?       @map("stamp_url") @db.VarChar(500)
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  customer      Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  createdBy     User          @relation("InvoiceCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  signedBy      User?         @relation("InvoiceSignedBy", fields: [signedById], references: [id], onDelete: SetNull)
+  vatOverriddenBy User?       @relation("InvoiceVatOverriddenBy", fields: [vatOverriddenById], references: [id], onDelete: SetNull)
+  items         InvoiceItem[]
+  payments      Payment[]
+  reminders     Reminder[]
+  emailLogs     InvoiceEmailLog[]
+  recurringExecutions RecurringExecution[]
+  recurringPlanId String?       @map("recurring_plan_id") @db.Uuid
+  recurringPlan   RecurringPlan? @relation(fields: [recurringPlanId], references: [id], onDelete: SetNull)
+
+  @@map("invoices")
+  @@index([invoiceNumber])
+  @@index([status])
+  @@index([issueDate])
+  @@index([dueDate])
+  @@index([signedById])
+  @@index([vatOverriddenById])
+  @@index([recurringPlanId])
+}
+
+model InvoiceEmailLog {
+  id             String    @id @default(uuid()) @db.Uuid
+  invoiceId      String    @map("invoice_id") @db.Uuid
+  sentById       String?   @map("sent_by") @db.Uuid
+  recipientEmail String    @map("recipient_email") @db.VarChar(255)
+  subject        String    @db.VarChar(255)
+  message        String    @db.Text
+  status         String    @db.VarChar(30)
+  deliveryMode   String?   @map("delivery_mode") @db.VarChar(30)
+  messageId      String?   @map("message_id") @db.VarChar(255)
+  filePath       String?   @map("file_path") @db.VarChar(1000)
+  errorMessage   String?   @map("error_message") @db.Text
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  invoice        Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  sentBy         User?     @relation(fields: [sentById], references: [id], onDelete: SetNull)
+
+  @@map("invoice_email_logs")
+  @@index([invoiceId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model InvoiceSequence {
+  year       Int      @id
+  nextNumber Int      @default(1) @map("next_number")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@map("invoice_sequences")
+}
+
+model CompanySettings {
+  id              Int      @id @default(1)
+  name            String   @db.VarChar(255)
+  address         String?  @db.Text
+  phone           String?  @db.VarChar(50)
+  email           String?  @db.VarChar(255)
+  taxNumber       String?  @map("tax_number") @db.VarChar(100)
+  logoUrl         String?  @map("logo_url") @db.VarChar(500)
+  signatureUrl    String?  @map("signature_url") @db.VarChar(500)
+  stampUrl        String?  @map("stamp_url") @db.VarChar(500)
+  defaultCurrency String   @default("MAD") @map("default_currency") @db.VarChar(10)
+  defaultTaxRate  Decimal  @default(20) @map("default_tax_rate") @db.Decimal(5, 2)
+  vatEnabled      Boolean  @default(true) @map("vat_enabled")
+  moroccoVatRate  Decimal  @default(20) @map("morocco_vat_rate") @db.Decimal(5, 2)
+  paymentTerms    String?  @map("payment_terms") @db.Text
+  bankDetails     String?  @map("bank_details") @db.Text
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("company_settings")
+}
+
+model Product {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @db.VarChar(255)
+  description String?  @db.Text
+  unit        String?  @db.VarChar(50)
+  unitPrice   Decimal  @map("unit_price") @db.Decimal(12, 2)
+  taxRate     Decimal  @default(20) @map("tax_rate") @db.Decimal(5, 2)
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("products")
+  @@index([name])
+  @@index([isActive])
+}
+
+model InvoiceItem {
+  id          String   @id @default(uuid()) @db.Uuid
+  invoiceId   String   @map("invoice_id") @db.Uuid
+  description String   @db.Text
+  unit        String?  @db.VarChar(50)
+  quantity    Decimal  @db.Decimal(12, 2)
+  unitPrice   Decimal  @map("unit_price") @db.Decimal(12, 2)
+  taxRate     Decimal  @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  total       Decimal  @db.Decimal(12, 2)
+  sortOrder   Int      @default(0) @map("sort_order")
+
+  // Relations
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@map("invoice_items")
+}
+
+model Payment {
+  id           String        @id @default(uuid()) @db.Uuid
+  invoiceId    String        @map("invoice_id") @db.Uuid
+  recordedById String        @map("recorded_by") @db.Uuid
+  amount       Decimal       @db.Decimal(12, 2)
+  paymentDate  DateTime      @map("payment_date") @db.Date
+  method       PaymentMethod
+  reference    String?       @db.VarChar(255)
+  notes        String?       @db.Text
+  createdAt    DateTime      @default(now()) @map("created_at")
+
+  // Relations
+  invoice      Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  recordedBy   User          @relation(fields: [recordedById], references: [id], onDelete: Restrict)
+
+  @@map("payments")
+  @@index([paymentDate])
+}
+
+model RecurringPlan {
+  id                 String              @id @default(uuid()) @db.Uuid
+  customerId         String              @map("customer_id") @db.Uuid
+  createdById        String              @map("created_by") @db.Uuid
+  name               String              @db.VarChar(255)
+  frequency          RecurringFrequency
+  intervalCount      Int                 @default(1) @map("interval_count")
+  status             RecurringPlanStatus @default(ACTIVE)
+  startDate          DateTime            @map("start_date") @db.Date
+  endDate            DateTime?           @map("end_date") @db.Date
+  nextRunDate        DateTime            @map("next_run_date") @db.Date
+  lastRunAt          DateTime?           @map("last_run_at")
+  dueDays            Int                 @default(30) @map("due_days")
+  autoSend           Boolean             @default(false) @map("auto_send")
+  currency           String              @default("MAD") @db.VarChar(10)
+  discount           Decimal             @default(0) @db.Decimal(12, 2)
+  notes              String?             @db.Text
+  terms              String?             @db.Text
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+
+  customer  Customer             @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  createdBy User                 @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  items     RecurringPlanItem[]
+  invoices  Invoice[]
+  executions RecurringExecution[]
+
+  @@map("recurring_plans")
+  @@index([customerId])
+  @@index([createdById])
+  @@index([status, nextRunDate])
+}
+
+model RecurringPlanItem {
+  id          String   @id @default(uuid()) @db.Uuid
+  planId      String   @map("plan_id") @db.Uuid
+  description String   @db.Text
+  unit        String?  @db.VarChar(50)
+  quantity    Decimal  @db.Decimal(12, 2)
+  unitPrice   Decimal  @map("unit_price") @db.Decimal(12, 2)
+  taxRate     Decimal  @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  sortOrder   Int      @default(0) @map("sort_order")
+
+  plan RecurringPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@map("recurring_plan_items")
+  @@index([planId])
+}
+
+model RecurringExecution {
+  id           String                   @id @default(uuid()) @db.Uuid
+  planId       String                   @map("plan_id") @db.Uuid
+  invoiceId    String?                  @map("invoice_id") @db.Uuid
+  scheduledFor DateTime                 @map("scheduled_for") @db.Date
+  status       RecurringExecutionStatus
+  errorMessage String?                  @map("error_message") @db.Text
+  createdAt    DateTime                 @default(now()) @map("created_at")
+
+  plan    RecurringPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  invoice Invoice?      @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+
+  @@unique([planId, scheduledFor])
+  @@map("recurring_executions")
+  @@index([status])
+  @@index([invoiceId])
+}
+
+model Reminder {
+  id             String         @id @default(uuid()) @db.Uuid
+  invoiceId      String         @map("invoice_id") @db.Uuid
+  sentById       String?        @map("sent_by") @db.Uuid // null if sent by system cron
+  type           ReminderType
+  recipientEmail String         @map("recipient_email") @db.VarChar(255)
+  subject        String         @db.VarChar(255)
+  body           String         @db.Text
+  status         ReminderStatus @default(PENDING)
+  sentAt         DateTime?      @map("sent_at")
+  errorMessage   String?        @map("error_message") @db.Text
+  createdAt      DateTime       @default(now()) @map("created_at")
+
+  // Relations
+  invoice        Invoice        @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  sentBy         User?          @relation(fields: [sentById], references: [id], onDelete: SetNull)
+
+  @@map("reminders")
+  @@index([status])
+}

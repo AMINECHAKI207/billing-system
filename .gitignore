@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+.npm
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Environment files
+.env
+.env.local
+.env.*.local
+server/.env
+server/.env.local
+server/.env.*.local
+
+# Uploads and generated files
+server/uploads/*
+!server/uploads/.gitkeep
+output/
+
+# Logs
+logs/
+server/logs/
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/settings.json
+.idea/
+
+# Prisma local files
+server/prisma/dev.db
+server/prisma/dev.db-journal

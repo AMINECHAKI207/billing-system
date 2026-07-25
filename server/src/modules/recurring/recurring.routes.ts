@@ -1,0 +1,11 @@
+import { Router } from 'express';
+import { authenticate } from '@middleware/authenticate';
+import { requirePermission } from '@middleware/requirePermission';
+import { recurringController } from './recurring.controller';
+const router=Router();
+router.use(authenticate);
+router.route('/').get(requirePermission('recurring.view'),recurringController.list).post(requirePermission('recurring.create'),recurringController.create);
+router.route('/:id').get(requirePermission('recurring.view'),recurringController.get).put(requirePermission('recurring.update'),recurringController.update);
+router.patch('/:id/status',requirePermission('recurring.update'),recurringController.status);
+router.post('/:id/run',requirePermission('recurring.run'),recurringController.run);
+export default router;

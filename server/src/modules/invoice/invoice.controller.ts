@@ -108,7 +108,7 @@ export class InvoiceController {
 
   async sign(req: Request, res: Response, next: NextFunction) {
     try {
-      const invoice = await invoiceService.signInvoice(req.params.id!, req.user!.id, permissionScope(req.user!.permissionScopes, 'invoices.update'));
+      const invoice = await invoiceService.signInvoice(req.params.id!, req.user!.id, permissionScope(req.user!.permissionScopes, 'invoices.sign'));
       ApiResponse.success(res, { invoice }, 'Invoice signed successfully');
     } catch (error) {
       next(error);
@@ -117,7 +117,7 @@ export class InvoiceController {
 
   async cancelSignature(req: Request, res: Response, next: NextFunction) {
     try {
-      const invoice = await invoiceService.cancelInvoiceSignature(req.params.id!, req.user!.id, permissionScope(req.user!.permissionScopes, 'invoices.update'));
+      const invoice = await invoiceService.cancelInvoiceSignature(req.params.id!, req.user!.id, permissionScope(req.user!.permissionScopes, 'invoices.sign'));
       ApiResponse.success(res, { invoice }, 'Invoice signature cancelled successfully');
     } catch (error) {
       next(error);

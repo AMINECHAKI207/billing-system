@@ -7,7 +7,7 @@ import bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import sharp from 'sharp';
 import zlib from 'zlib';
-import { InvoiceStatus, Role } from '@prisma/client';
+import { InvoiceStatus, PermissionScope, Role } from '@prisma/client';
 
 let prisma: typeof import('@config/database').prisma;
 let createApp: typeof import('../app').createApp;
@@ -60,8 +60,85 @@ async function main() {
     ],
   });
 
-  assert.ok(admin);
-  assert.ok(employee);
+    assert.ok(admin);
+    assert.ok(employee);
+
+  const [adminRole, employeeRole] = await Promise.all([
+  prisma.rbacRole.findUniqueOrThrow({
+    where: { name: 'ADMIN' },
+  }),
+  prisma.rbacRole.findUniqueOrThrow({
+    where: { name: 'EMPLOYEE' },
+  }),
+]);
+
+const signPermission = await prisma.permission.upsert({
+  where: { key: 'invoices.sign' },
+  update: {},
+  create: {
+    key: 'invoices.sign',
+    resource: 'invoices',
+    action: 'sign',
+    description: 'Sign invoices',
+  },
+});
+
+await prisma.rolePermission.upsert({
+  where: {
+    roleId_permissionId: {
+      roleId: adminRole.id,
+      permissionId: signPermission.id,
+    },
+  },
+  update: {
+    scope: PermissionScope.ALL,
+  },
+  create: {
+    roleId: adminRole.id,
+    permissionId: signPermission.id,
+    scope: PermissionScope.ALL,
+  },
+});
+
+const updatePermission = await prisma.permission.upsert({
+  where: { key: 'invoices.update' },
+  update: {},
+  create: {
+    key: 'invoices.update',
+    resource: 'invoices',
+    action: 'update',
+    description: 'Update invoices',
+  },
+});
+
+await prisma.rolePermission.upsert({
+  where: {
+    roleId_permissionId: {
+      roleId: adminRole.id,
+      permissionId: updatePermission.id,
+    },
+  },
+  update: {
+    scope: PermissionScope.ALL,
+  },
+  create: {
+    roleId: adminRole.id,
+    permissionId: updatePermission.id,
+    scope: PermissionScope.ALL,
+  },
+});
+
+await prisma.user.update({
+  where: { id: admin.id },
+  data: { rbacRoleId: adminRole.id },
+});
+
+await prisma.user.update({
+  where: { id: employee.id },
+  data: { rbacRoleId: employeeRole.id },
+});
+
+
 
   const customer = await prisma.customer.create({
     data: {

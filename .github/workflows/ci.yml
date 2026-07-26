@@ -28,7 +28,7 @@ jobs:
 
     env:
       NODE_ENV: test
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/billing_db?schema=public
+      DATABASE_URL: postgresql://postgres:chaki@localhost:5432/billing_db?schema=public
       JWT_ACCESS_SECRET: ci_access_secret_replace_before_production_1234567890
       JWT_REFRESH_SECRET: ci_refresh_secret_replace_before_production_1234567890
       JWT_ACCESS_EXPIRES_IN: 15m

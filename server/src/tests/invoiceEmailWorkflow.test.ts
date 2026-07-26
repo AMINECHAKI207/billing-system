@@ -4,7 +4,7 @@ import fs from 'fs/promises';
 import http from 'http';
 import path from 'path';
 import { AddressInfo } from 'net';
-import { InvoiceStatus, Role } from '@prisma/client';
+import { InvoiceStatus, PermissionScope, Role } from '@prisma/client';
 import { createApp } from '../app';
 import { prisma } from '@config/database';
 import { env } from '@config/env';
@@ -128,6 +128,7 @@ async function main() {
         message: 'Please find the invoice attached.',
       },
     });
+    console.log('SEND EMAIL RESPONSE:', sendResult.status, sendResult.body);
     assert.equal(sendResult.status, 200);
     assert.equal(sendResult.body.data.delivery.mode, 'local');
     assert.equal(sendResult.body.data.invoice.status, InvoiceStatus.SENT);
@@ -189,6 +190,45 @@ async function main() {
 async function seedUsers() {
   const passwordHash = await bcrypt.hash(password, 4);
 
+  const [adminRole, employeeRole] = await Promise.all([
+    prisma.rbacRole.findUniqueOrThrow({
+      where: { name: 'ADMIN' },
+    }),
+    prisma.rbacRole.findUniqueOrThrow({
+      where: { name: 'EMPLOYEE' },
+    }),
+  ]);
+const sendPermission = await prisma.permission.upsert({
+  where: { key: 'invoices.send' },
+  update: {},
+  create: {
+    key: 'invoices.send',
+    resource: 'invoices',
+    action: 'send',
+    description: 'Send invoices by email',
+  },
+});
+
+const existingGrant = await prisma.rolePermission.updateMany({
+  where: {
+    roleId: adminRole.id,
+    permissionId: sendPermission.id,
+  },
+  data: {
+    scope: PermissionScope.ALL,
+  },
+});
+
+if (existingGrant.count === 0) {
+  await prisma.rolePermission.create({
+    data: {
+      roleId: adminRole.id,
+      permissionId: sendPermission.id,
+      scope: PermissionScope.ALL,
+    },
+  });
+}
+
   await prisma.user.createMany({
     data: [
       {
@@ -196,12 +236,14 @@ async function seedUsers() {
         email: adminEmail,
         passwordHash,
         role: Role.ADMIN,
+        rbacRoleId: adminRole.id,
       },
       {
         name: 'Email Employee',
         email: employeeEmail,
         passwordHash,
         role: Role.EMPLOYEE,
+        rbacRoleId: employeeRole.id,
       },
     ],
   });

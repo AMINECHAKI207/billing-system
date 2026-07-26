@@ -20,7 +20,7 @@ router.route('/:id')
 router.get('/:id/pdf', requirePermission('invoices.view'), invoiceController.downloadPdf);
 router.post('/:id/sign', requirePermission('invoices.sign'), invoiceController.sign);
 router.delete('/:id/sign', requirePermission('invoices.sign'), invoiceController.cancelSignature);
-router.post('/:id/email', requirePermission('invoices.update'), invoiceController.sendEmail);
+router.post('/:id/email', requirePermission('invoices.send'), invoiceController.sendEmail);
 router.patch('/:id/status', requirePermission('invoices.update'), invoiceController.updateStatus);
 router.post('/:id/payments', requirePermission('payments.create'), invoiceController.addPayment);
 

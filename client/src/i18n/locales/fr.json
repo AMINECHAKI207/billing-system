@@ -20,7 +20,10 @@
     "label": "Langue",
     "french": "Français",
     "english": "Anglais",
-    "arabic": "Arabe"
+    "arabic": "Arabe",
+    "nativeEnglish": "English",
+    "nativeFrench": "Français",
+    "nativeArabic": "العربية"
   },
   "login": {
     "title": "Se connecter",
@@ -652,6 +655,7 @@
     "clientFallback": "Client",
     "userFallback": "Utilisateur",
     "saving": "Enregistrement...",
+    "creating": "Création...",
     "add": "Ajouter",
     "lightMode": "Mode clair",
     "darkMode": "Mode sombre",
@@ -811,5 +815,39 @@
   },
   "theme": {
     "label": "Theme"
+  },
+  "loginShowcase": {
+    "badge": "Approuve par des entreprises du monde entier",
+    "title": "Gerez votre facturation depuis un espace securise.",
+    "description": "Creez des factures, gerez les clients, suivez les paiements et generez des rapports depuis un tableau de bord intuitif.",
+    "metricInvoicesValue": "1 248",
+    "metricInvoicesLabel": "Factures creees",
+    "metricPaymentsValue": "84 260 $",
+    "metricPaymentsLabel": "Paiements recus",
+    "metricClientsValue": "356",
+    "metricClientsLabel": "Clients actifs",
+    "welcomeTitle": "Bon retour",
+    "previewOverview": "Vue globale",
+    "previewInvoices": "Factures",
+    "previewClients": "Clients",
+    "previewPayments": "Paiements",
+    "previewReports": "Rapports",
+    "previewSettings": "Parametres",
+    "previewTitle": "Vue du tableau de bord",
+    "previewSubtitle": "Bon retour. Voici ce qui se passe dans votre activite.",
+    "previewStatus": "Ce mois-ci",
+    "previewRevenue": "Revenu total",
+    "previewInvoicesTotal": "Total factures",
+    "previewPaymentsTotal": "Paiements recus",
+    "previewStartDate": "1 juin",
+    "previewMidDate": "15 juin",
+    "previewEndDate": "30 juin",
+    "previewPaid": "Paye",
+    "previewDue": "Du",
+    "previewOpen": "Ouvert",
+    "footerCopyright": "© 2026 Billing System. Tous droits reserves.",
+    "footerPrivacy": "Confidentialite",
+    "footerTerms": "Conditions d'utilisation",
+    "footerSupport": "Support"
   }
 }

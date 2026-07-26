@@ -193,11 +193,12 @@
     position: relative;
     display: grid;
     place-items: center;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
     padding: 1.5rem;
     background:
       radial-gradient(circle at 18% 18%, hsl(var(--primary) / 0.18), transparent 26rem),
-      radial-gradient(circle at 82% 12%, rgb(14 165 233 / 0.12), transparent 24rem),
+      radial-gradient(circle at 82% 12%, hsl(var(--primary) / 0.1), transparent 24rem),
       linear-gradient(135deg, hsl(var(--background)), hsl(var(--surface-soft)));
     color: hsl(var(--foreground));
   }
@@ -224,6 +225,34 @@
     padding: 1.5rem;
     box-shadow: var(--shadow-soft);
     backdrop-filter: blur(20px);
+  }
+
+  .login-split-card {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    width: min(100%, 94rem);
+    overflow: hidden;
+    border: 1px solid hsl(var(--border) / 0.75);
+    border-radius: 1.5rem;
+    background: hsl(var(--card) / 0.96);
+    box-shadow: var(--shadow-soft);
+    backdrop-filter: blur(20px);
+  }
+
+  @media (min-width: 1024px) {
+    .login-split-card {
+      min-height: min(46rem, calc(100vh - 2rem));
+      grid-template-columns: minmax(0, 1.33fr) minmax(25rem, 1fr);
+      grid-template-rows: minmax(0, 1fr) auto;
+    }
+  }
+
+  .login-shell--split {
+    padding: 1rem;
+    background:
+      radial-gradient(circle at 50% -12%, hsl(var(--primary) / 0.2), transparent 34rem),
+      linear-gradient(135deg, hsl(var(--background)), hsl(var(--surface-soft)));
   }
 
   .login-brand {
@@ -261,7 +290,7 @@
 
   .app-main {
     min-width: 0;
-    transition: margin-left 280ms ease;
+    transition: margin-left 280ms ease, margin-right 280ms ease;
   }
 
   .sidebar-expanded .app-main {
@@ -270,6 +299,24 @@
 
   .sidebar-collapsed .app-main {
     margin-left: 78px;
+  }
+
+  .app-rtl .app-sidebar {
+    box-shadow: -18px 0 50px rgb(15 23 42 / 0.18);
+  }
+
+  .app-rtl.sidebar-expanded .app-main {
+    margin-left: 0;
+    margin-right: 270px;
+  }
+
+  .app-rtl.sidebar-collapsed .app-main {
+    margin-left: 0;
+    margin-right: 78px;
+  }
+
+  .app-ltr .app-main {
+    margin-right: 0;
   }
 
   .sidebar-nav-item {
@@ -299,6 +346,12 @@
     white-space: nowrap;
   }
 
+  .app-rtl .app-sidebar-collapsed .sidebar-nav-item::after {
+    left: auto;
+    right: calc(100% + 0.65rem);
+    transform: translateY(-50%) translateX(0.35rem);
+  }
+
   .app-sidebar-collapsed .sidebar-nav-item:hover::after,
   .app-sidebar-collapsed .sidebar-nav-item:focus-visible::after {
     opacity: 1;
@@ -311,6 +364,10 @@
 
   .app-sidebar-mobile-closed {
     transform: translateX(-100%);
+  }
+
+  .app-rtl .app-sidebar-mobile-closed {
+    transform: translateX(100%);
   }
 
   .sidebar-overlay {
@@ -351,6 +408,10 @@
     border-color: rgb(148 163 184 / 0.18);
   }
 
+  .app-rtl .nav-item:hover {
+    transform: translateX(-2px);
+  }
+
   .nav-item-active {
     background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
     color: #ffffff !important;
@@ -389,13 +450,21 @@
     .app-sidebar-mobile-closed {
       transform: translateX(0);
     }
+
+    .app-rtl .app-sidebar-mobile-open,
+    .app-rtl .app-sidebar-mobile-closed {
+      transform: translateX(0);
+    }
   }
 
   @media (max-width: 1023px) {
     .app-main,
     .sidebar-expanded .app-main,
-    .sidebar-collapsed .app-main {
+    .sidebar-collapsed .app-main,
+    .app-rtl.sidebar-expanded .app-main,
+    .app-rtl.sidebar-collapsed .app-main {
       margin-left: 0;
+      margin-right: 0;
     }
 
     .app-sidebar-expanded,
@@ -473,6 +542,11 @@
     border: 2px solid hsl(var(--card));
   }
 
+  .app-rtl .notification-badge {
+    left: -0.25rem;
+    right: auto;
+  }
+
   .notification-dropdown {
     position: absolute;
     right: 0;
@@ -484,6 +558,12 @@
     opacity: 0;
     pointer-events: none;
     transition: opacity 160ms ease, transform 180ms ease;
+  }
+
+  .app-rtl .notification-dropdown {
+    left: 0;
+    right: auto;
+    transform-origin: top left;
   }
 
   .notification-dropdown-open {
@@ -503,9 +583,17 @@
     transition: background-color 160ms ease, transform 160ms ease;
   }
 
+  .app-rtl .notification-item {
+    text-align: right;
+  }
+
   .notification-item:hover {
     background: hsl(var(--muted) / 0.72);
     transform: translateX(2px);
+  }
+
+  .app-rtl .notification-item:hover {
+    transform: translateX(-2px);
   }
 
   .notification-item-icon {
@@ -551,6 +639,10 @@
     transition: transform 160ms ease, border-color 160ms ease, background-color 160ms ease;
   }
 
+  .app-rtl .profile-trigger {
+    padding: 0.125rem 0.125rem 0.125rem 0.65rem;
+  }
+
   .profile-trigger:hover {
     transform: translateY(-1px);
     border-color: hsl(var(--primary) / 0.35);
@@ -568,6 +660,12 @@
     opacity: 0;
     pointer-events: none;
     transition: opacity 160ms ease, transform 180ms ease;
+  }
+
+  .app-rtl .profile-dropdown {
+    left: 0;
+    right: auto;
+    transform-origin: top left;
   }
 
   .profile-dropdown-open {

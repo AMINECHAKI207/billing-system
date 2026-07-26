@@ -20,7 +20,10 @@
     "label": "Language",
     "french": "French",
     "english": "English",
-    "arabic": "Arabic"
+    "arabic": "Arabic",
+    "nativeEnglish": "English",
+    "nativeFrench": "Français",
+    "nativeArabic": "العربية"
   },
   "login": {
     "title": "Sign In",
@@ -610,7 +613,7 @@
       "cancelled": "Canceled"
     },
     "searchAria": "Search in {{section}}",
-    "autoRemindersResult": "{{created}} reminder(s) created, {{skipped}} already existing(s).",
+    "autoRemindersResult": "{{created}} reminder(s) created, {{skipped}} already existing.",
     "dueSoonCount": "{{count}} near maturity",
     "failedReminderCount": "{{count}} retry failed",
     "editSignature": "Edit signature",
@@ -622,7 +625,7 @@
     "confirmDeleteAsset": "Remove {{asset}} from company?",
     "exportedInvoices": "{{count}} invoice(s) exported.",
     "exportedCustomers": "{{count}} exported customer(s).",
-    "exportedReminders": "{{count}} restart(s) exported.",
+    "exportedReminders": "{{count}} reminder(s) exported.",
     "exportedReportRows": "{{count}} exported report line(s).",
     "customerHasInvoices": "This customer has {{count}} linked invoice(s). Turn it off to hide it.",
     "confirmDeleteCustomer": "Permanently delete client {{name}}?",
@@ -652,6 +655,7 @@
     "clientFallback": "Customer",
     "userFallback": "User",
     "saving": "Saving...",
+    "creating": "Creating...",
     "add": "Add",
     "lightMode": "Light mode",
     "darkMode": "Dark mode",
@@ -811,5 +815,39 @@
   },
   "theme": {
     "label": "Theme"
+  },
+  "loginShowcase": {
+    "badge": "Trusted by businesses worldwide",
+    "title": "Manage your billing from one secure place.",
+    "description": "Create invoices, manage clients, track payments and generate reports from an intuitive dashboard.",
+    "metricInvoicesValue": "1,248",
+    "metricInvoicesLabel": "Invoices created",
+    "metricPaymentsValue": "$84,260",
+    "metricPaymentsLabel": "Payments received",
+    "metricClientsValue": "356",
+    "metricClientsLabel": "Active clients",
+    "welcomeTitle": "Welcome back",
+    "previewOverview": "Overview",
+    "previewInvoices": "Invoices",
+    "previewClients": "Clients",
+    "previewPayments": "Payments",
+    "previewReports": "Reports",
+    "previewSettings": "Settings",
+    "previewTitle": "Dashboard overview",
+    "previewSubtitle": "Welcome back. Here's what's happening with your business.",
+    "previewStatus": "This month",
+    "previewRevenue": "Total revenue",
+    "previewInvoicesTotal": "Total invoices",
+    "previewPaymentsTotal": "Payments received",
+    "previewStartDate": "Jun 1",
+    "previewMidDate": "Jun 15",
+    "previewEndDate": "Jun 30",
+    "previewPaid": "Paid",
+    "previewDue": "Due",
+    "previewOpen": "Open",
+    "footerCopyright": "© 2026 Billing System. All rights reserved.",
+    "footerPrivacy": "Privacy Policy",
+    "footerTerms": "Terms of Service",
+    "footerSupport": "Support"
   }
 }

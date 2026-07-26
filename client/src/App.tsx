@@ -2174,13 +2174,15 @@ function App() {
                 setLoginValidationError('');
             }} onRememberMeChange={setRememberMe} onShowPasswordToggle={() => setShowPassword((isVisible) => !isVisible)} onThemeToggle={handleThemeToggle} password={password} rememberMe={rememberMe} showPassword={showPassword} themePreference={themePreference}/>);
     }
-    return (<main className={`app-shell min-h-screen bg-slate-50 text-slate-950 ${isSidebarExpanded ? 'sidebar-expanded' : 'sidebar-collapsed'}`}>
+    const currentLanguage = reactI18n.resolvedLanguage || reactI18n.language || "en";
+    const isRTL = currentLanguage.startsWith("ar");
+    return (<main className={`app-shell min-h-screen bg-slate-50 text-slate-950 ${isRTL ? 'app-rtl' : 'app-ltr'} ${isSidebarExpanded ? 'sidebar-expanded' : 'sidebar-collapsed'}`} dir={isRTL ? 'rtl' : 'ltr'}>
       <datalist id="country-options">
         {countryOptions.map((country) => (<option key={country.code} value={country.label}/>))}
       </datalist>
       {isMobileSidebarOpen ? (<button aria-label={t("app.text0124")} className="sidebar-overlay fixed inset-0 z-40 bg-slate-950/55 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} type="button"/>) : null}
 
-      <aside aria-label={t("app.text0125")} className={`app-sidebar fixed inset-y-0 left-0 z-50 border-r border-slate-200 px-3 py-5 lg:z-20 lg:block ${isMobileSidebarOpen ? 'app-sidebar-mobile-open' : 'app-sidebar-mobile-closed'} ${isSidebarExpanded ? 'app-sidebar-expanded' : 'app-sidebar-collapsed'}`} onMouseEnter={() => {
+      <aside aria-label={t("app.text0125")} className={`app-sidebar fixed inset-y-0 z-50 border-slate-200 px-3 py-5 lg:z-20 lg:block ${isRTL ? 'right-0 border-l' : 'left-0 border-r'} ${isMobileSidebarOpen ? 'app-sidebar-mobile-open' : 'app-sidebar-mobile-closed'} ${isSidebarExpanded ? 'app-sidebar-expanded' : 'app-sidebar-collapsed'}`} onMouseEnter={() => {
             if (isSidebarCollapsed)
                 setIsSidebarHovered(true);
         }} onMouseLeave={() => setIsSidebarHovered(false)}>
@@ -2190,13 +2192,13 @@ function App() {
             <p className="brand-name text-sm font-semibold">{t("app.text0127")}</p>
             <p className="brand-subtitle text-xs text-slate-500">{t("app.text0128")}</p>
           </div>
-          <button aria-label={isSidebarCollapsed ? t("audit.text0023") : t("audit.text0024")} className="sidebar-toggle ml-auto hidden h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-300 transition hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-primary/70 lg:inline-flex" onClick={handleSidebarToggle} title={isSidebarCollapsed ? t("audit.text0023") : t("audit.text0024")} type="button">
+          <button aria-label={isSidebarCollapsed ? t("audit.text0023") : t("audit.text0024")} className={`sidebar-toggle hidden h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-300 transition hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-primary/70 lg:inline-flex ${isRTL ? 'mr-auto' : 'ml-auto'}`} onClick={handleSidebarToggle} title={isSidebarCollapsed ? t("audit.text0023") : t("audit.text0024")} type="button">
             {isSidebarCollapsed ? <PanelLeftOpen className="h-4 w-4"/> : <PanelLeftClose className="h-4 w-4"/>}
           </button>
         </div>
 
         <nav aria-label={t("app.text0129")} className="nav-menu mt-8 space-y-1 text-sm">
-          {visibleNavItems.map(({ key, label: labelKey, icon: Icon }) => (<button aria-label={t(labelKey)} className={`nav-item sidebar-nav-item flex h-10 w-full items-center rounded-md text-left font-medium transition ${isSidebarExpanded ? 'gap-3 px-3' : 'justify-center px-2'} ${activeView === key
+          {visibleNavItems.map(({ key, label: labelKey, icon: Icon }) => (<button aria-label={t(labelKey)} className={`nav-item sidebar-nav-item flex h-10 w-full items-center rounded-md font-medium transition ${isRTL ? 'text-right' : 'text-left'} ${isSidebarExpanded ? 'gap-3 px-3' : 'justify-center px-2'} ${activeView === key
                 ? 'nav-item-active bg-slate-900 text-white'
                 : 'text-slate-700 hover:bg-slate-100'}`} data-tooltip={t(labelKey)} key={key} onClick={() => handleViewChange(key)} title={t(labelKey)} type="button">
               <Icon className="h-4 w-4 shrink-0"/>
@@ -2215,8 +2217,8 @@ function App() {
                 <Menu className="h-4 w-4"/>
               </button>
               <div className="search-shell header-search relative min-w-0 flex-1">
-                <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400"/>
-                <input aria-label={t("audit.searchAria", { section: t(activeViewMeta.title) })} className="h-9 w-full rounded-md border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none ring-primary/20 transition focus:ring-4" onChange={(event) => setSearchTerm(event.target.value)} placeholder={getSearchPlaceholder(activeView)} type="search" value={searchTerm}/>
+                <Search className={`pointer-events-none absolute top-2.5 h-4 w-4 text-slate-400 ${isRTL ? 'right-3' : 'left-3'}`}/>
+                <input aria-label={t("audit.searchAria", { section: t(activeViewMeta.title) })} className={`h-9 w-full rounded-md border border-slate-200 bg-white text-sm outline-none ring-primary/20 transition focus:ring-4 ${isRTL ? 'pl-3 pr-9 text-right' : 'pl-9 pr-3'}`} onChange={(event) => setSearchTerm(event.target.value)} placeholder={getSearchPlaceholder(activeView)} type="search" value={searchTerm}/>
               </div>
               <span className="status-pill hidden shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 sm:inline-flex">
                 {hasAccessToken ? t("audit.text0025") : t("audit.text0026")}
@@ -2224,6 +2226,7 @@ function App() {
               {actionMessage ? (<span className="header-message hidden max-w-48 truncate text-xs font-medium text-primary xl:inline">
                   {actionMessage}
                 </span>) : null}
+              <LanguageSwitcher compact className="h-9 min-w-16 px-2.5"/>
               <button aria-label={themePreference === 'dark' ? t("audit.text0027") : t("audit.text0028")} aria-pressed={themePreference === 'dark'} className="icon-button" onClick={handleThemeToggle} title={themePreference === 'dark' ? t("audit.text0029") : t("audit.text0030")} type="button">
                 {themePreference === 'dark' ? <Sun className="h-4 w-4"/> : <Moon className="h-4 w-4"/>}
               </button>
@@ -2260,7 +2263,7 @@ function App() {
                                 <span className="block truncate text-sm font-semibold text-slate-900">
                                   {item.title}
                                 </span>
-                                <span className="mt-0.5 block text-left text-xs text-slate-500">
+                                <span className={`mt-0.5 block text-xs text-slate-500 ${isRTL ? 'text-right' : 'text-left'}`}>
                                   {item.description}
                                 </span>
                               </span>
@@ -3087,7 +3090,7 @@ function App() {
                     <input aria-label={t("app.text0253")} className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none ring-primary/20 focus:ring-4" onChange={(event) => setRbacRoleName(event.target.value)} placeholder={t("app.text0253")} value={rbacRoleName}/>
                     <input aria-label={t("app.text0254")} className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none ring-primary/20 focus:ring-4" onChange={(event) => setRbacRoleDescription(event.target.value)} placeholder={t("app.text0255")} value={rbacRoleDescription}/>
                     <button className="h-9 w-full rounded-md bg-primary px-3 text-sm font-medium text-white disabled:opacity-60" disabled={rbacRoleMutation.isPending || !rbacRoleName.trim()} type="submit">
-                      {rbacRoleMutation.isPending ? 'Creation...' : t("audit.text0065")}
+                      {rbacRoleMutation.isPending ? t("auditFinal.saving") : t("audit.text0065")}
                     </button>
                   </form>
                   <div className="mt-5 space-y-2">
@@ -3427,7 +3430,7 @@ function App() {
                     <input className="h-10 rounded-md border border-slate-200 px-3 text-sm" min="0" max="100" type="number" value={recurringTaxRate} onChange={(e) => setRecurringTaxRate(Number(e.target.value))} placeholder={t("app.text0308")}/>
                     <input className="h-10 rounded-md border border-slate-200 px-3 text-sm" min="0" type="number" value={recurringDueDays} onChange={(e) => setRecurringDueDays(Number(e.target.value))} placeholder={t("app.text0309")}/>
                     <label className="flex h-10 items-center gap-2 rounded-md border border-slate-200 px-3 text-sm"><input checked={recurringAutoSend} onChange={(e) => setRecurringAutoSend(e.target.checked)} type="checkbox"/>{t("app.text0310")}</label>
-                    <button className="h-10 rounded-md bg-primary px-4 text-sm font-medium text-white disabled:opacity-60 md:col-span-3" disabled={recurringCreateMutation.isPending || !recurringCustomerId} type="submit">{recurringCreateMutation.isPending ? 'Creation...' : t("audit.text0085")}</button>
+                    <button className="h-10 rounded-md bg-primary px-4 text-sm font-medium text-white disabled:opacity-60 md:col-span-3" disabled={recurringCreateMutation.isPending || !recurringCustomerId} type="submit">{recurringCreateMutation.isPending ? t("auditFinal.creating") : t("audit.text0085")}</button>
                   </form>) : null}
               </div>
               <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -3728,7 +3731,7 @@ function App() {
                     <input checked={reminderSendEmail} onChange={(event) => setReminderSendEmail(event.target.checked)} type="checkbox"/>{t("app.text0353")}</label>
                   <button className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-white transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60" disabled={reminderMutation.isPending} type="submit">
                     <Mail className="h-4 w-4"/>
-                    {reminderMutation.isPending ? 'Creation...' : t("audit.text0099")}
+                    {reminderMutation.isPending ? t("auditFinal.creating") : t("audit.text0099")}
                   </button>
                 </form>
 
@@ -4349,76 +4352,165 @@ type LoginPageProps = {
 };
 function LoginPage({ email, password, rememberMe, showPassword, isPending, errorMessage, themePreference, onEmailChange, onPasswordChange, onRememberMeChange, onShowPasswordToggle, onThemeToggle, onLogin, }: LoginPageProps) {
     const { t } = useTranslation();
-    return (<main className="login-shell min-h-screen">
-    <div className="absolute right-4 top-4 z-10 flex w-40 flex-col gap-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card)/0.88)] p-3 shadow-[var(--shadow-soft)] backdrop-blur-xl">
-      <div className="flex flex-col gap-1.5">
-        <span className="text-xs font-semibold text-slate-600">{t('language.label')}</span>
-        <LanguageSwitcher className="h-9 w-full text-sm transition hover:border-primary/40"/>
-      </div>
+    return (<main className="login-shell login-shell--split min-h-screen">
+      <section className="login-split-card">
+        <aside className="relative order-2 flex min-h-[32rem] flex-col overflow-hidden bg-card p-6 text-card-foreground sm:p-8 lg:order-1 lg:min-h-[43rem] lg:p-10 dark:bg-slate-950 dark:text-white">
+          <div className="pointer-events-none absolute -right-20 -top-24 h-72 w-72 rounded-full border border-primary/35"/>
+          <div className="pointer-events-none absolute -right-36 -top-16 h-96 w-96 rounded-full border border-primary/20"/>
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_0%_0%,hsl(var(--primary)/0.16),transparent_34rem)] dark:bg-[radial-gradient(circle_at_0%_0%,hsl(var(--primary)/0.42),transparent_34rem)]"/>
 
-      <div className="flex flex-col gap-1.5">
-        <span className="text-xs font-semibold text-slate-600">{t('theme.label')}</span>
-        <button aria-label={themePreference === 'dark'
-            ? t("audit.text0027")
-            : t("audit.text0028")} aria-pressed={themePreference === 'dark'} className="icon-button login-theme-toggle h-9 w-full" onClick={onThemeToggle} title={themePreference === 'dark' ? t('auditFinal.lightMode') : t('auditFinal.darkMode')} type="button">
-          {themePreference === 'dark' ? (<Sun className="h-4 w-4"/>) : (<Moon className="h-4 w-4"/>)}
-        </button>
-      </div>
-    </div>
-
-      <section className="login-card">
-        <div className="login-brand">
-          <div className="brand-mark flex h-12 w-12 items-center justify-center rounded-xl text-base font-bold text-white">{t("app.text0126")}</div>
-          <div>
-            <p className="text-sm font-semibold text-slate-900">{t("app.text0127")}</p>
-            <p className="text-xs font-medium text-slate-500">{t("app.text0128")}</p>
-          </div>
-        </div>
-
-        <div className="mt-8">
-          <p className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-            <ShieldCheck className="h-3.5 w-3.5"/>
-            {t("login.secureWorkspace")}
-          </p>
-          <h1 className="mt-4 text-3xl font-bold tracking-normal text-slate-950">{t("login.title")}</h1>
-          <p className="mt-2 text-sm text-slate-500">
-            {t("login.description")}
-          </p>
-        </div>
-
-        <form className="mt-7 space-y-4" onSubmit={onLogin}>
-          <label className="block">
-            <span className="text-sm font-semibold text-slate-700">{t("login.email")}</span>
-            <input autoComplete="email" className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none ring-primary/20 transition focus:ring-4" onChange={(event) => onEmailChange(event.target.value)} placeholder={t("app.text0383")} type="email" value={email}/>
-          </label>
-
-          <label className="block">
-            <span className="text-sm font-semibold text-slate-700">{t("login.password")}</span>
-            <div className="relative mt-2">
-              <input autoComplete="current-password" className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 pr-11 text-sm outline-none ring-primary/20 transition focus:ring-4" onChange={(event) => onPasswordChange(event.target.value)} placeholder={t("app.text0384")} type={showPassword ? 'text' : 'password'} value={password}/>
-              <button className="absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900" onClick={onShowPasswordToggle} type="button">
-                {showPassword ? <EyeOff className="h-4 w-4"/> : <Eye className="h-4 w-4"/>}
-              </button>
+          <div className="login-brand relative">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-base font-bold text-primary-foreground shadow-lg shadow-primary/20 ring-1 ring-border dark:shadow-primary/30 dark:ring-white/15">{t("app.text0126")}</div>
+            <div>
+              <p className="text-base font-semibold text-card-foreground dark:text-white">{t("app.text0127")}</p>
+              <p className="text-sm font-medium text-muted-foreground dark:text-slate-300">{t("app.text0128")}</p>
             </div>
-          </label>
-
-          <div className="flex items-center justify-between gap-3 text-sm">
-            <label className="inline-flex items-center gap-2 font-medium text-slate-600">
-              <input checked={rememberMe} className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary" onChange={(event) => onRememberMeChange(event.target.checked)} type="checkbox"/>
-              {t("login.rememberMe")}
-            </label>
-            <a className="font-semibold text-primary transition hover:text-primary/80" href="/forgot-password">{t("app.text0385")}</a>
           </div>
 
-          {errorMessage ? (<div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700">
-              {errorMessage}
-            </div>) : null}
+          <div className="relative mt-8 max-w-2xl lg:mt-10">
+            <p className="inline-flex items-center gap-2 rounded-full bg-muted px-3 py-1.5 text-xs font-semibold text-card-foreground shadow-sm ring-1 ring-border dark:bg-white/10 dark:text-white dark:ring-white/10">
+              <ShieldCheck className="h-3.5 w-3.5"/>
+              {t("loginShowcase.badge")}
+            </p>
+            <h1 className="mt-5 text-4xl font-bold leading-tight tracking-normal text-card-foreground sm:text-5xl dark:text-white">
+              {t("loginShowcase.title")}
+            </h1>
+            <p className="mt-4 max-w-xl text-base leading-7 text-muted-foreground dark:text-slate-300">
+              {t("loginShowcase.description")}
+            </p>
+          </div>
 
-          <button className="primary-action inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-70" disabled={isPending} type="submit">
-            {isPending ? <Loader2 className="h-4 w-4 animate-spin"/> : <LogIn className="h-4 w-4"/>}
-            {isPending ? t("login.loggingIn") : t("login.login")}
-          </button>
-        </form>
+          <div className="relative mt-6 grid max-w-2xl grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="rounded-xl border border-border bg-muted/70 p-4 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/[0.04]">
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-lg shadow-primary/20 dark:shadow-primary/25"><ReceiptText className="h-4 w-4"/></span>
+              <p className="mt-3 text-xl font-semibold">{t("loginShowcase.metricInvoicesValue")}</p>
+              <p className="mt-1 text-sm font-medium text-muted-foreground dark:text-slate-300">{t("loginShowcase.metricInvoicesLabel")}</p>
+            </div>
+            <div className="rounded-xl border border-border bg-muted/70 p-4 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/[0.04]">
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-lg shadow-primary/20 dark:shadow-primary/25"><WalletCards className="h-4 w-4"/></span>
+              <p className="mt-3 text-xl font-semibold">{t("loginShowcase.metricPaymentsValue")}</p>
+              <p className="mt-1 text-sm font-medium text-muted-foreground dark:text-slate-300">{t("loginShowcase.metricPaymentsLabel")}</p>
+            </div>
+            <div className="rounded-xl border border-border bg-muted/70 p-4 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/[0.04]">
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-lg shadow-primary/20 dark:shadow-primary/25"><Users className="h-4 w-4"/></span>
+              <p className="mt-3 text-xl font-semibold">{t("loginShowcase.metricClientsValue")}</p>
+              <p className="mt-1 text-sm font-medium text-muted-foreground dark:text-slate-300">{t("loginShowcase.metricClientsLabel")}</p>
+            </div>
+          </div>
+
+          <div className="relative mt-6 hidden rounded-2xl border border-border bg-card/90 p-4 shadow-2xl backdrop-blur dark:border-white/10 dark:bg-slate-950/88 dark:shadow-black/30 sm:block">
+            <div className="flex items-center gap-2">
+              <span className="h-3 w-3 rounded-full bg-rose-400"/>
+              <span className="h-3 w-3 rounded-full bg-amber-300"/>
+              <span className="h-3 w-3 rounded-full bg-emerald-400"/>
+            </div>
+            <div className="mt-4 grid gap-4 lg:grid-cols-[9rem_minmax(0,1fr)]">
+              <div className="space-y-2 border-border lg:border-r lg:pr-4 dark:border-white/10">
+                {[t("loginShowcase.previewOverview"), t("loginShowcase.previewInvoices"), t("loginShowcase.previewClients"), t("loginShowcase.previewPayments"), t("loginShowcase.previewReports"), t("loginShowcase.previewSettings")].map((item, index) => (<div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium ${index === 0 ? 'bg-primary/15 text-primary ring-1 ring-primary/25 dark:bg-primary/30 dark:text-white dark:ring-primary/30' : 'text-muted-foreground dark:text-slate-400'}`} key={item}>
+                    <span className="h-1.5 w-1.5 rounded-full bg-current"/>
+                    {item}
+                  </div>))}
+              </div>
+              <div>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-base font-semibold text-card-foreground dark:text-white">{t("loginShowcase.previewTitle")}</p>
+                    <p className="mt-1 text-xs text-muted-foreground dark:text-slate-400">{t("loginShowcase.previewSubtitle")}</p>
+                  </div>
+                  <span className="rounded-lg border border-border bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
+                    {t("loginShowcase.previewStatus")}
+                  </span>
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  {[t("loginShowcase.previewRevenue"), t("loginShowcase.previewInvoicesTotal"), t("loginShowcase.previewPaymentsTotal")].map((label, index) => (<div className="rounded-xl bg-muted p-3 ring-1 ring-border dark:bg-white/5 dark:ring-white/8" key={label}>
+                      <p className="text-[11px] text-muted-foreground dark:text-slate-400">{label}</p>
+                      <p className="mt-2 text-sm font-semibold text-card-foreground dark:text-white">{['$84,260', '1,248', '$76,430'][index]}</p>
+                    </div>))}
+                </div>
+                <div className="mt-4 rounded-xl bg-muted/60 p-4 ring-1 ring-border dark:bg-white/[0.03] dark:ring-white/8">
+                  <div className="flex h-24 items-end gap-2">
+                    {[36, 48, 44, 58, 74, 52, 66, 60, 72, 68, 82, 76, 88].map((height, index) => (<span className="flex-1 rounded-t-md bg-primary shadow-[0_0_18px_hsl(var(--primary)/0.35)]" key={index} style={{ height: `${height}%` }}/>))}
+                  </div>
+                  <div className="mt-3 flex justify-between text-[10px] font-medium text-muted-foreground">
+                    <span>{t("loginShowcase.previewStartDate")}</span>
+                    <span>{t("loginShowcase.previewMidDate")}</span>
+                    <span>{t("loginShowcase.previewEndDate")}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <section className="order-1 flex flex-col bg-card p-5 text-card-foreground backdrop-blur-xl sm:p-8 lg:order-2 lg:p-10 dark:bg-slate-950 dark:text-white">
+          <div className="flex items-center justify-end gap-3">
+            <LanguageSwitcher className="h-12 w-40 rounded-xl border-border bg-muted/70 text-sm text-card-foreground shadow-sm transition hover:border-primary/40 dark:border-slate-800 dark:bg-white/[0.04] dark:text-slate-100"/>
+            <button aria-label={themePreference === 'dark'
+            ? t("audit.text0027")
+            : t("audit.text0028")} aria-pressed={themePreference === 'dark'} className="icon-button login-theme-toggle h-12 w-16 rounded-xl border-border bg-muted/70 text-card-foreground shadow-sm transition hover:border-primary/40 dark:border-slate-800 dark:bg-white/[0.04] dark:text-slate-100" onClick={onThemeToggle} title={themePreference === 'dark' ? t('auditFinal.lightMode') : t('auditFinal.darkMode')} type="button">
+                  {themePreference === 'dark' ? (<Sun className="h-4 w-4"/>) : (<Moon className="h-4 w-4"/>)}
+                </button>
+          </div>
+
+          <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center py-8">
+            <div>
+              <p className="inline-flex items-center gap-2 rounded-full bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground ring-1 ring-border dark:bg-white/5 dark:text-slate-300 dark:ring-white/8">
+                <ShieldCheck className="h-3.5 w-3.5"/>
+                {t("login.secureWorkspace")}
+              </p>
+              <h2 className="mt-6 text-4xl font-bold tracking-normal text-card-foreground dark:text-white">{t("loginShowcase.welcomeTitle")}</h2>
+              <p className="mt-3 text-base text-muted-foreground dark:text-slate-400">
+                {t("login.description")}
+              </p>
+            </div>
+
+            <form className="mt-8 space-y-5" onSubmit={onLogin}>
+              <label className="block">
+                <span className="text-sm font-semibold text-card-foreground dark:text-white">{t("login.email")}</span>
+                <div className="relative mt-2">
+                  <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground dark:text-slate-400"/>
+                  <input autoComplete="email" className="h-12 w-full rounded-xl border border-input bg-background px-12 text-sm text-foreground outline-none ring-primary/20 transition placeholder:text-muted-foreground focus:border-primary/60 focus:ring-4 dark:border-slate-800 dark:bg-white/[0.04] dark:text-slate-100 dark:placeholder:text-slate-500" onChange={(event) => onEmailChange(event.target.value)} placeholder={t("app.text0383")} type="email" value={email}/>
+                </div>
+              </label>
+
+              <label className="block">
+                <span className="text-sm font-semibold text-card-foreground dark:text-white">{t("login.password")}</span>
+                <div className="relative mt-2">
+                  <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground dark:text-slate-400"/>
+                  <input autoComplete="current-password" className="h-12 w-full rounded-xl border border-input bg-background px-12 pr-12 text-sm text-foreground outline-none ring-primary/20 transition placeholder:text-muted-foreground focus:border-primary/60 focus:ring-4 dark:border-slate-800 dark:bg-white/[0.04] dark:text-slate-100 dark:placeholder:text-slate-500" onChange={(event) => onPasswordChange(event.target.value)} placeholder={t("app.text0384")} type={showPassword ? 'text' : 'password'} value={password}/>
+                  <button className="absolute right-3 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground dark:text-slate-400 dark:hover:bg-white/8 dark:hover:text-white" onClick={onShowPasswordToggle} type="button">
+                    {showPassword ? <EyeOff className="h-4 w-4"/> : <Eye className="h-4 w-4"/>}
+                  </button>
+                </div>
+              </label>
+
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <label className="inline-flex items-center gap-2 font-medium text-muted-foreground dark:text-slate-300">
+                  <input checked={rememberMe} className="h-4 w-4 rounded border-input bg-background text-primary focus:ring-primary dark:border-slate-700 dark:bg-transparent" onChange={(event) => onRememberMeChange(event.target.checked)} type="checkbox"/>
+                  {t("login.rememberMe")}
+                </label>
+                <a className="font-semibold text-primary transition hover:text-primary/80" href="/forgot-password">{t("app.text0385")}</a>
+              </div>
+
+              {errorMessage ? (<div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700">
+                  {errorMessage}
+                </div>) : null}
+
+              <button className="primary-action inline-flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-base font-semibold text-primary-foreground transition disabled:cursor-not-allowed disabled:opacity-70" disabled={isPending} type="submit">
+                {isPending ? <Loader2 className="h-4 w-4 animate-spin"/> : <LogIn className="h-4 w-4"/>}
+                {isPending ? t("login.loggingIn") : t("login.login")}
+              </button>
+            </form>
+          </div>
+        </section>
+        <footer className="order-3 hidden items-center justify-between border-t border-border bg-card px-8 py-4 text-xs text-muted-foreground dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400 lg:col-span-2 lg:flex">
+          <p>{t("loginShowcase.footerCopyright")}</p>
+          <div className="flex items-center gap-8">
+            <span>{t("loginShowcase.footerPrivacy")}</span>
+            <span>{t("loginShowcase.footerTerms")}</span>
+            <span>{t("loginShowcase.footerSupport")}</span>
+          </div>
+        </footer>
       </section>
     </main>);
 }

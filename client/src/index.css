@@ -233,9 +233,6 @@
   }
 
   .login-theme-toggle {
-    position: absolute;
-    right: 1.25rem;
-    top: 1.25rem;
     z-index: 2;
   }
 
@@ -808,3 +805,10 @@ body,
   min-height: 100vh;
   background-color: hsl(var(--background));
 }
+
+/* Internationalized direction support */
+html[dir="rtl"] body { direction: rtl; }
+html[dir="rtl"] input,
+html[dir="rtl"] textarea,
+html[dir="rtl"] select { text-align: right; }
+html[dir="ltr"] body { direction: ltr; }

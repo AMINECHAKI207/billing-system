@@ -11,7 +11,7 @@
     "sourceMap": true,
 
     /* Module Resolution */
-    "moduleResolution": "node",
+    "moduleResolution": "Node",
     "esModuleInterop": true,          
     "allowSyntheticDefaultImports": true,
     "resolveJsonModule": true,

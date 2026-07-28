@@ -7,10 +7,12 @@ import { useTranslation } from 'react-i18next';
 import { useCallback, useEffect, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent, type ReactNode, } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bar, BarChart, Cell, CartesianGrid, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis, } from 'recharts';
+import { useConfirm } from '@/hooks/useConfirm';
+import { useToast } from '@/hooks/useToast';
 import { formatCurrency, getDaysUntilDue } from '@/lib/utils';
 import { getInitialTheme, getStoredTheme, isThemePreference, persistTheme } from '@/lib/theme';
-import { cancelInvoiceSignature, changePassword, createInvoice, createCustomer, createProduct, createUser, createReminder, deleteCompanySignature, deleteCompanyStamp, deleteCustomer, downloadInvoicePdf, getCompanySettings, getCustomers, getCustomerById, getCurrentUser, getEmailDeliveryStatus, getInvoiceById, getInvoiceDashboard, getInvoices, getPayments, getRecurringPlans, getProducts, getReceivablesAgingReport, getRecentEmailLogs, getReminders, getTaxSummaryReport, getUsers, getRbacPermissions, getRbacRoles, getRbacUsers, assignRbacPermissions, assignRbacUserRole, getRbacUserClients, assignRbacUserClients, createRbacPermission, createRbacRole, deleteRbacRole, clearAuthSession, login, logout, recordPayment, createRecurringPlan, updateRecurringPlanStatus, runRecurringPlan, removeCompanyAssetBackgroundPreview, runAutomaticReminders, sendInvoiceEmail, sendTestEmail, signInvoice, printInvoicePdf, refreshAccessToken, updateCustomer, updateInvoice, updateCompanySettings, updateThemePreference, updateInvoiceStatus, updateProduct, updateUser, uploadCompanySignature, uploadCompanyStamp, } from '@/lib/api';
-import type { CompanySettings, CreateProductForm, CreateUserForm, Customer, CreateInvoiceForm, DashboardPeriod, DashboardStats, Invoice, InvoiceItemForm, InvoiceStatus, PaymentMethod, Reminder, ReminderStatus, ReminderType, RecurringFrequency, RecurringPlanStatus, ThemePreference, UpdateCompanySettingsForm, UpdateProductForm, UpdateUserForm, User, UserRole, } from '@/types';
+import { approveDevis, cancelDevisSignature, cancelInvoiceSignature, changePassword, convertDevisToInvoice, createDevis, createInvoice, createCustomer, createProduct, createUser, createReminder, deleteCompanySignature, deleteCompanyStamp, deleteCustomer, deleteDevis, deleteDraftDevis, downloadDevisPdf, downloadInvoicePdf, downloadInvoicesExcel, getCompanySettings, getCustomers, getCustomerById, getCurrentUser, getDevis, getDevisById, getEmailDeliveryStatus, getInvoiceById, getInvoiceDashboard, getInvoices, getPayments, getRecurringPlans, getProducts, getReceivablesAgingReport, getRecentEmailLogs, getReminders, getTaxSummaryReport, getUsers, getRbacPermissions, getRbacRoles, getRbacUsers, assignRbacPermissions, assignRbacUserRole, getRbacUserClients, assignRbacUserClients, createRbacPermission, createRbacRole, deleteRbacRole, clearAuthSession, login, logout, recordPayment, createRecurringPlan, updateRecurringPlanStatus, runRecurringPlan, removeCompanyAssetBackgroundPreview, rejectDevis, runAutomaticReminders, sendDevis, sendInvoiceEmail, sendTestEmail, signDevis, signInvoice, printInvoicePdf, refreshAccessToken, updateCustomer, updateDevis, updateInvoice, updateCompanySettings, updateThemePreference, updateInvoiceStatus, updateProduct, updateUser, uploadCompanySignature, uploadCompanyStamp, } from '@/lib/api';
+import type { CompanySettings, CreateDevisForm, CreateProductForm, CreateUserForm, Customer, CreateInvoiceForm, DashboardPeriod, DashboardStats, Devis, DevisItemForm, DevisStatus, Invoice, InvoiceItemForm, InvoiceStatus, PaymentMethod, Reminder, ReminderStatus, ReminderType, RecurringFrequency, RecurringPlanStatus, ThemePreference, UpdateCompanySettingsForm, UpdateProductForm, UpdateUserForm, User, UserRole, } from '@/types';
 type InvoiceSummary = {
     id: string;
     number: string;
@@ -28,17 +30,19 @@ type CustomerExposure = {
     overdue: number;
 };
 type InvoiceDraftItem = InvoiceItemForm;
+type DevisDraftItem = DevisItemForm;
 type CompanyAssetKind = 'signature' | 'stamp';
 type CompanyAssetDraft = {
     blob: Blob;
     fileName: string;
     previewUrl: string;
 };
-type ViewKey = 'dashboard' | 'clients' | 'invoices' | 'payments' | 'reports' | 'reminders' | 'products' | 'users' | 'rbac' | 'settings';
+type ViewKey = 'dashboard' | 'clients' | 'invoices' | 'devis' | 'payments' | 'reports' | 'reminders' | 'products' | 'users' | 'rbac' | 'settings';
 type InvoiceSortField = 'createdAt' | 'issueDate' | 'dueDate' | 'total' | 'balanceDue' | 'invoiceNumber';
+type DevisSortField = 'createdAt' | 'issueDate' | 'validUntil' | 'total' | 'devisNumber';
 type CustomerSortField = 'createdAt' | 'name' | 'company' | 'email';
 type CustomerStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
-type ExportTarget = 'invoices' | 'customers' | 'reminders' | 'reports' | 'tax-report';
+type ExportTarget = 'invoices' | 'invoices-excel' | 'customers' | 'reminders' | 'reports' | 'tax-report';
 type NotificationItem = {
     key: string;
     title: string;
@@ -52,6 +56,18 @@ const AUTO_BACKGROUND_REMOVAL_STORAGE_KEY = 'companyAssetAutoBackgroundRemoval';
 const emptyInvoices: InvoiceSummary[] = [];
 const emptyCustomerExposure: CustomerExposure[] = [];
 const emptyRevenueTrend: NonNullable<DashboardStats['monthlyRevenue']> = [];
+const errorMessagePattern = /unable|impossible|failed|error|erreur|cannot|can't|invalid|forbidden|unauthorized|expired|not found|missing|refused|denied|blocked|check|must|do not have permission|does not match/i;
+const warningMessagePattern = /warning|attention|verify|check|expired|overdue|confirm|before|cannot|must/i;
+const successMessagePattern = /success|saved|created|updated|deleted|signed|cancelled|converted|sent|generated|recorded|completed|prepared|assigned|download|closed|cree|creee|enregistre|modifie|supprime|signe|envoye|termine/i;
+const getToastVariantFromMessage = (message: string): 'success' | 'error' | 'warning' | 'info' => {
+    if (errorMessagePattern.test(message))
+        return 'error';
+    if (successMessagePattern.test(message))
+        return 'success';
+    if (warningMessagePattern.test(message))
+        return 'warning';
+    return 'info';
+};
 const statusLabelKeys: Record<InvoiceStatus, string> = {
     DRAFT: 'audit.status.draft',
     SENT: 'audit.status.sent',
@@ -61,6 +77,15 @@ const statusLabelKeys: Record<InvoiceStatus, string> = {
     CANCELLED: 'audit.status.cancelled',
 };
 const getStatusLabel = (status: InvoiceStatus) => t(statusLabelKeys[status]);
+const devisStatusLabelKeys: Record<DevisStatus, string> = {
+    DRAFT: 'devis.status.draft',
+    SENT: 'devis.status.sent',
+    APPROVED: 'devis.status.approved',
+    REJECTED: 'devis.status.rejected',
+    EXPIRED: 'devis.status.expired',
+    CONVERTED: 'devis.status.converted',
+};
+const getDevisStatusLabel = (status: DevisStatus) => t(devisStatusLabelKeys[status]);
 const statusClasses: Record<InvoiceStatus, string> = {
     DRAFT: 'bg-slate-100 text-slate-700 ring-slate-200',
     SENT: 'bg-sky-100 text-sky-700 ring-sky-200',
@@ -68,6 +93,14 @@ const statusClasses: Record<InvoiceStatus, string> = {
     PARTIALLY_PAID: 'bg-amber-100 text-amber-700 ring-amber-200',
     OVERDUE: 'bg-rose-100 text-rose-700 ring-rose-200',
     CANCELLED: 'bg-zinc-100 text-zinc-700 ring-zinc-200',
+};
+const devisStatusClasses: Record<DevisStatus, string> = {
+    DRAFT: 'bg-slate-100 text-slate-700 ring-slate-200',
+    SENT: 'bg-sky-100 text-sky-700 ring-sky-200',
+    APPROVED: 'bg-emerald-100 text-emerald-700 ring-emerald-200',
+    REJECTED: 'bg-rose-100 text-rose-700 ring-rose-200',
+    EXPIRED: 'bg-amber-100 text-amber-700 ring-amber-200',
+    CONVERTED: 'bg-violet-100 text-violet-700 ring-violet-200',
 };
 const statusChartColors: Record<InvoiceStatus, string> = {
     DRAFT: '#64748B',
@@ -97,6 +130,7 @@ const navItems: Array<{
     { key: 'dashboard', label: "app.text0006", icon: ReceiptText },
     { key: 'clients', label: "app.text0007", icon: Users },
     { key: 'invoices', label: "app.text0008", icon: WalletCards },
+    { key: 'devis', label: "devis.nav", icon: ReceiptText },
     { key: 'payments', label: "app.text0009", icon: CheckCircle2 },
     { key: 'reports', label: "app.text0010", icon: AlertTriangle },
     { key: 'reminders', label: "app.text0011", icon: Bell },
@@ -120,6 +154,10 @@ const viewMeta: Record<ViewKey, {
     invoices: {
         title: "app.text0008",
         description: "app.text0019",
+    },
+    devis: {
+        title: "devis.title",
+        description: "devis.description",
     },
     payments: {
         title: "app.text0009",
@@ -154,6 +192,7 @@ const viewPaths: Record<ViewKey, string> = {
     dashboard: '/dashboard',
     clients: '/clients',
     invoices: '/invoices',
+    devis: '/devis',
     payments: '/payments',
     reports: '/reports',
     reminders: '/reminders',
@@ -173,6 +212,8 @@ function App() {
     const { t, i18n: reactI18n } = useTranslation();
     const countryOptions = buildCountryOptions(reactI18n.language);
     const queryClient = useQueryClient();
+    const confirm = useConfirm();
+    const toast = useToast();
     const [activeView, setActiveView] = useState<ViewKey>('dashboard');
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
         return localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === 'true';
@@ -188,11 +229,18 @@ function App() {
     const notificationMenuRef = useRef<HTMLDivElement | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [invoiceStatusFilter, setInvoiceStatusFilter] = useState<InvoiceStatus | 'ALL'>('ALL');
+    const [invoiceCustomerFilter, setInvoiceCustomerFilter] = useState('');
     const [invoiceDateFrom, setInvoiceDateFrom] = useState('');
     const [invoiceDateTo, setInvoiceDateTo] = useState('');
     const [invoicePage, setInvoicePage] = useState(1);
     const [invoiceSortBy, setInvoiceSortBy] = useState<InvoiceSortField>('createdAt');
     const [invoiceSortOrder, setInvoiceSortOrder] = useState<'asc' | 'desc'>('desc');
+    const [devisStatusFilter, setDevisStatusFilter] = useState<DevisStatus | 'ALL'>('ALL');
+    const [devisDateFrom, setDevisDateFrom] = useState('');
+    const [devisDateTo, setDevisDateTo] = useState('');
+    const [devisPage, setDevisPage] = useState(1);
+    const [devisSortBy, setDevisSortBy] = useState<DevisSortField>('createdAt');
+    const [devisSortOrder, setDevisSortOrder] = useState<'asc' | 'desc'>('desc');
     const [reminderStatusFilter, setReminderStatusFilter] = useState<ReminderStatus | 'ALL'>('ALL');
     const [reminderTypeFilter, setReminderTypeFilter] = useState<ReminderType | 'ALL'>('ALL');
     const [reminderPage, setReminderPage] = useState(1);
@@ -224,10 +272,17 @@ function App() {
     const [rememberMe, setRememberMe] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
     const [loginValidationError, setLoginValidationError] = useState('');
-    const [actionMessage, setActionMessage] = useState('');
+    const actionMessage = '';
+    const setActionMessage = useCallback((message: string) => {
+        const trimmedMessage = message.trim();
+        if (!trimmedMessage)
+            return;
+        toast[getToastVariantFromMessage(trimmedMessage)](trimmedMessage);
+    }, [toast]);
     const [exportingTarget, setExportingTarget] = useState<ExportTarget | ''>('');
     const [selectedInvoiceId, setSelectedInvoiceId] = useState('');
     const [viewInvoiceId, setViewInvoiceId] = useState('');
+    const [viewDevisId, setViewDevisId] = useState('');
     const [viewCustomerId, setViewCustomerId] = useState('');
     const [emailInvoiceId, setEmailInvoiceId] = useState('');
     const [invoiceEmailRecipient, setInvoiceEmailRecipient] = useState('');
@@ -248,6 +303,7 @@ function App() {
     const [customerTaxNumber, setCustomerTaxNumber] = useState('');
     const [editingCustomerId, setEditingCustomerId] = useState('');
     const [editingInvoiceId, setEditingInvoiceId] = useState('');
+    const [editingDevisId, setEditingDevisId] = useState('');
     const [editingProductId, setEditingProductId] = useState('');
     const [productName, setProductName] = useState('');
     const [productDescription, setProductDescription] = useState('');
@@ -308,6 +364,7 @@ function App() {
         return localStorage.getItem(AUTO_BACKGROUND_REMOVAL_STORAGE_KEY) !== 'false';
     });
     const [isInvoiceFormOpen, setIsInvoiceFormOpen] = useState(false);
+    const [isDevisFormOpen, setIsDevisFormOpen] = useState(false);
     const [invoiceCustomerId, setInvoiceCustomerId] = useState('');
     const [invoiceStatus, setInvoiceStatus] = useState<Extract<InvoiceStatus, 'DRAFT' | 'SENT'>>('DRAFT');
     const [invoiceIssueDate, setInvoiceIssueDate] = useState(getToday());
@@ -320,6 +377,18 @@ function App() {
     const [invoiceTerms, setInvoiceTerms] = useState(t("audit.text0002"));
     const [invoiceItems, setInvoiceItems] = useState<InvoiceDraftItem[]>([
         { description: t("app.text0027"), unit: 'forfait', quantity: 1, unitPrice: 1000, taxRate: 20 },
+    ]);
+    const [devisCustomerId, setDevisCustomerId] = useState('');
+    const [devisStatus, setDevisStatus] = useState<Extract<DevisStatus, 'DRAFT' | 'SENT' | 'APPROVED'>>('DRAFT');
+    const [devisIssueDate, setDevisIssueDate] = useState(getToday());
+    const [devisValidUntil, setDevisValidUntil] = useState(getDateAfterDays(30));
+    const [devisTaxRate, setDevisTaxRate] = useState(20);
+    const [devisVatOverrideReason, setDevisVatOverrideReason] = useState('');
+    const [devisDiscount, setDevisDiscount] = useState(0);
+    const [devisNotes, setDevisNotes] = useState('');
+    const [devisTerms, setDevisTerms] = useState(t("audit.text0002"));
+    const [devisItems, setDevisItems] = useState<DevisDraftItem[]>([
+        { description: t("app.text0027"), unit: 'forfait', quantity: 1, unitPrice: 1000, taxRate: 20, discount: 0 },
     ]);
     const [recurringName, setRecurringName] = useState(t("audit.text0003"));
     const [recurringCustomerId, setRecurringCustomerId] = useState('');
@@ -350,7 +419,11 @@ function App() {
             setPassword('');
             setLoginValidationError('');
             setActionMessage('');
+            toast.success(t("audit.text0111"));
             navigateAppTo('/dashboard', true);
+        },
+        onError: (error) => {
+            toast.error(getApiErrorMessage(error, t("audit.text0022")));
         },
     });
     const reminderMutation = useMutation({
@@ -709,6 +782,100 @@ function App() {
             setActionMessage(t("app.text0054"));
         },
     });
+    const devisMutation = useMutation({
+        mutationFn: () => {
+            const payload: CreateDevisForm = {
+                customerId: devisCustomerId,
+                ...(editingDevisId ? {} : { status: devisStatus }),
+                issueDate: devisIssueDate,
+                validUntil: devisValidUntil,
+                taxRate: effectiveDevisVatRate,
+                ...(isVatOverride ? { vatOverrideReason: devisVatOverrideReason } : {}),
+                discount: devisDiscount,
+                notes: devisNotes || undefined,
+                terms: devisTerms || undefined,
+                currency: 'MAD',
+                items: devisItems.map((item) => ({
+                    description: item.description,
+                    unit: item.unit || undefined,
+                    quantity: Number(item.quantity),
+                    unitPrice: Number(item.unitPrice),
+                    discount: Number(item.discount),
+                    taxRate: Number(item.taxRate),
+                })),
+            };
+            return editingDevisId ? updateDevis(editingDevisId, payload) : createDevis(payload);
+        },
+        onSuccess: () => {
+            setActionMessage(editingDevisId ? t('devis.updated') : t('devis.created'));
+            setIsDevisFormOpen(false);
+            resetDevisForm();
+            queryClient.invalidateQueries({ queryKey: ['devis'] });
+        },
+        onError: (error) => {
+            setActionMessage(getLocalizedDevisErrorMessage(error, t('devis.saveFailed'), t));
+        },
+    });
+    const devisActionMutation = useMutation<Devis | { devis: Devis; invoice: Invoice } | null, unknown, {
+        devisId: string;
+        action: 'send' | 'approve' | 'reject' | 'delete' | 'convert' | 'sign' | 'cancelSignature';
+    }>({
+        mutationFn: ({ devisId, action }: {
+            devisId: string;
+            action: 'send' | 'approve' | 'reject' | 'delete' | 'convert' | 'sign' | 'cancelSignature';
+        }) => {
+            if (action === 'send')
+                return sendDevis(devisId);
+            if (action === 'approve')
+                return approveDevis(devisId);
+            if (action === 'reject')
+                return rejectDevis(devisId);
+            if (action === 'delete')
+                return deleteDevis(devisId).then(() => null);
+            if (action === 'sign')
+                return signDevis(devisId);
+            if (action === 'cancelSignature')
+                return cancelDevisSignature(devisId);
+            return convertDevisToInvoice(devisId);
+        },
+        onSuccess: (result, variables) => {
+            if (variables.action === 'convert' && result && 'invoice' in result) {
+                setActionMessage(t('devis.converted', { number: result.invoice.invoiceNumber }));
+                setViewInvoiceId(result.invoice.id);
+            }
+            else if (variables.action === 'sign') {
+                setActionMessage(t('devis.signed'));
+            }
+            else if (variables.action === 'cancelSignature') {
+                setActionMessage(t('devis.signatureCancelled'));
+            }
+            else if (variables.action === 'delete') {
+                setActionMessage(t('devis.deleted'));
+                setViewDevisId('');
+            }
+            else {
+                setActionMessage(t('devis.actionDone'));
+            }
+            queryClient.invalidateQueries({ queryKey: ['devis'] });
+            queryClient.invalidateQueries({ queryKey: ['devis', 'detail'] });
+            queryClient.invalidateQueries({ queryKey: ['invoices'] });
+        },
+        onError: (error) => {
+            setActionMessage(getLocalizedDevisErrorMessage(error, t('devis.actionFailed'), t));
+        },
+    });
+    const deleteDraftDevisMutation = useMutation({
+        mutationFn: deleteDraftDevis,
+        onSuccess: (result) => {
+            setActionMessage(t('devis.draftsDeleted', { count: result.deletedCount }));
+            setViewDevisId('');
+            queryClient.invalidateQueries({ queryKey: ['devis'] });
+            queryClient.invalidateQueries({ queryKey: ['devis', 'detail'] });
+        },
+        onError: (error) => {
+            setActionMessage(getApiErrorMessage(error, t('devis.deleteDraftsFailed')));
+        },
+    });
     const invoiceStatusMutation = useMutation({
         mutationFn: ({ invoiceId, status }: {
             invoiceId: string;
@@ -748,6 +915,7 @@ function App() {
             activeView,
             searchTerm,
             invoiceStatusFilter,
+            invoiceCustomerFilter,
             invoiceDateFrom,
             invoiceDateTo,
             invoicePage,
@@ -759,12 +927,37 @@ function App() {
             limit: activeView === 'invoices' ? 25 : 8,
             search: searchTerm || undefined,
             status: invoiceStatusFilter === 'ALL' ? undefined : invoiceStatusFilter,
+            customerId: activeView === 'invoices' ? invoiceCustomerFilter || undefined : undefined,
             dateFrom: activeView === 'invoices' ? invoiceDateFrom || undefined : undefined,
             dateTo: activeView === 'invoices' ? invoiceDateTo || undefined : undefined,
             sortBy: invoiceSortBy,
             sortOrder: invoiceSortOrder,
         }),
         enabled: hasAccessToken,
+    });
+    const devisQuery = useQuery({
+        queryKey: [
+            'devis',
+            activeView,
+            searchTerm,
+            devisStatusFilter,
+            devisDateFrom,
+            devisDateTo,
+            devisPage,
+            devisSortBy,
+            devisSortOrder,
+        ],
+        queryFn: () => getDevis({
+            page: activeView === 'devis' ? devisPage : 1,
+            limit: activeView === 'devis' ? 25 : 8,
+            search: searchTerm || undefined,
+            status: devisStatusFilter === 'ALL' ? undefined : devisStatusFilter,
+            dateFrom: activeView === 'devis' ? devisDateFrom || undefined : undefined,
+            dateTo: activeView === 'devis' ? devisDateTo || undefined : undefined,
+            sortBy: devisSortBy,
+            sortOrder: devisSortOrder,
+        }),
+        enabled: hasAccessToken && (activeView === 'devis' || activeView === 'dashboard'),
     });
     const dashboardQuery = useQuery({
         queryKey: [
@@ -796,7 +989,7 @@ function App() {
         ],
         queryFn: () => getCustomers({
             page: activeView === 'clients' ? customerPage : 1,
-            limit: activeView === 'clients' ? 15 : 50,
+            limit: activeView === 'clients' ? 15 : 200,
             search: activeView === 'clients' ? searchTerm : undefined,
             isActive: activeView === 'clients'
                 ? customerStatusFilter === 'ALL'
@@ -897,6 +1090,11 @@ function App() {
         queryKey: ['invoices', 'detail', viewInvoiceId],
         queryFn: () => getInvoiceById(viewInvoiceId),
         enabled: hasAccessToken && Boolean(viewInvoiceId),
+    });
+    const devisDetailQuery = useQuery({
+        queryKey: ['devis', 'detail', viewDevisId],
+        queryFn: () => getDevisById(viewDevisId),
+        enabled: hasAccessToken && Boolean(viewDevisId),
     });
     const customerInvoiceQuery = useQuery({
         queryKey: ['customers', 'detail-invoices', viewCustomerId],
@@ -1059,10 +1257,13 @@ function App() {
         if (!invoiceCustomerId && firstCustomer) {
             setInvoiceCustomerId(firstCustomer.id);
         }
+        if (!devisCustomerId && firstCustomer) {
+            setDevisCustomerId(firstCustomer.id);
+        }
         if (!recurringCustomerId && firstCustomer) {
             setRecurringCustomerId(firstCustomer.id);
         }
-    }, [customerQuery.data, invoiceCustomerId, recurringCustomerId]);
+    }, [customerQuery.data, devisCustomerId, invoiceCustomerId, recurringCustomerId]);
     useEffect(() => {
         if (invoiceDetailQuery.data && !paymentAmount) {
             setPaymentAmount(String(Number(invoiceDetailQuery.data.balanceDue)));
@@ -1070,7 +1271,10 @@ function App() {
     }, [invoiceDetailQuery.data, paymentAmount]);
     useEffect(() => {
         setInvoicePage(1);
-    }, [searchTerm, invoiceStatusFilter, invoiceDateFrom, invoiceDateTo, invoiceSortBy, invoiceSortOrder]);
+    }, [searchTerm, invoiceStatusFilter, invoiceCustomerFilter, invoiceDateFrom, invoiceDateTo, invoiceSortBy, invoiceSortOrder]);
+    useEffect(() => {
+        setDevisPage(1);
+    }, [searchTerm, devisStatusFilter, devisDateFrom, devisDateTo, devisSortBy, devisSortOrder]);
     useEffect(() => {
         setCustomerPage(1);
     }, [searchTerm, customerSortBy, customerSortOrder, customerStatusFilter]);
@@ -1090,10 +1294,11 @@ function App() {
             setActionMessage(t("app.text0059"));
             queryClient.removeQueries({ queryKey: ['auth'] });
             queryClient.removeQueries({ queryKey: ['invoices'] });
+            queryClient.removeQueries({ queryKey: ['devis'] });
             queryClient.removeQueries({ queryKey: ['customers'] });
             queryClient.removeQueries({ queryKey: ['reminders'] });
         }
-    }, [currentUserQuery.error, currentUserQuery.isError, queryClient, t]);
+    }, [currentUserQuery.error, currentUserQuery.isError, queryClient, setActionMessage, t]);
     useEffect(() => {
         if (companySettingsQuery.data &&
             !companyAssetDrafts.signature &&
@@ -1143,9 +1348,14 @@ function App() {
     const isAdmin = hasPermission('roles.view') && hasPermission('permissions.assign');
     const selectedInvoiceCustomer = customerQuery.data?.data.find((customer) => customer.id === invoiceCustomerId) ??
         invoiceDetailQuery.data?.customer;
+    const selectedDevisCustomer = customerQuery.data?.data.find((customer) => customer.id === devisCustomerId) ??
+        devisDetailQuery.data?.customer;
     const automaticVatRate = getAutomaticVatRate(selectedInvoiceCustomer, companySettingsQuery.data);
+    const automaticDevisVatRate = getAutomaticVatRate(selectedDevisCustomer, companySettingsQuery.data);
     const effectiveVatRate = isVatOverride ? invoiceTaxRate : automaticVatRate;
+    const effectiveDevisVatRate = isVatOverride ? devisTaxRate : automaticDevisVatRate;
     const invoiceTotals = calculateInvoiceTotals(invoiceItems, effectiveVatRate, invoiceDiscount);
+    const devisTotals = calculateDevisTotals(devisItems, effectiveDevisVatRate, devisDiscount);
     const visibleNavItems = navItems.filter((item) => {
         if (item.key === 'users')
             return hasPermission('users.view');
@@ -1157,6 +1367,8 @@ function App() {
             return hasPermission('clients.view');
         if (item.key === 'invoices')
             return hasPermission('invoices.view');
+        if (item.key === 'devis')
+            return hasPermission('devis.view');
         if (item.key === 'payments')
             return hasPermission('payments.view');
         if (item.key === 'reports')
@@ -1177,6 +1389,15 @@ function App() {
         })));
     }, [automaticVatRate, isVatOverride]);
     useEffect(() => {
+        if (isVatOverride)
+            return;
+        setDevisTaxRate(automaticDevisVatRate);
+        setDevisItems((items) => items.map((item) => ({
+            ...item,
+            taxRate: automaticDevisVatRate,
+        })));
+    }, [automaticDevisVatRate, isVatOverride]);
+    useEffect(() => {
         const cannotAccessAdminView = (activeView === 'users' && !userPermissions.includes('users.view')) ||
             (activeView === 'rbac' &&
                 !userPermissions.includes('roles.view') &&
@@ -1185,7 +1406,7 @@ function App() {
             setActiveView('dashboard');
             setActionMessage(t("app.text0060"));
         }
-    }, [activeView, currentUserQuery.data, t, userPermissions]);
+    }, [activeView, currentUserQuery.data, setActionMessage, t, userPermissions]);
     useEffect(() => {
         const role = rbacRolesQuery.data?.find((item) => item.id === selectedRbacRoleId) ?? rbacRolesQuery.data?.[0];
         if (!role)
@@ -1269,6 +1490,7 @@ function App() {
             dashboard: 'dashboard.view',
             clients: 'clients.view',
             invoices: 'invoices.view',
+            devis: 'devis.view',
             payments: 'payments.view',
             reports: 'reports.view',
             reminders: 'reminders.view',
@@ -1292,6 +1514,14 @@ function App() {
             setInvoicePage(1);
             setInvoiceSortBy('createdAt');
             setInvoiceSortOrder('desc');
+        }
+        if (view !== 'devis') {
+            setDevisStatusFilter('ALL');
+            setDevisDateFrom('');
+            setDevisDateTo('');
+            setDevisPage(1);
+            setDevisSortBy('createdAt');
+            setDevisSortOrder('desc');
         }
         if (view !== 'reminders') {
             setReminderStatusFilter('ALL');
@@ -1339,11 +1569,21 @@ function App() {
     const resetInvoiceFilters = () => {
         setSearchTerm('');
         setInvoiceStatusFilter('ALL');
+        setInvoiceCustomerFilter('');
         setInvoiceDateFrom('');
         setInvoiceDateTo('');
         setInvoicePage(1);
         setInvoiceSortBy('createdAt');
         setInvoiceSortOrder('desc');
+    };
+    const resetDevisFilters = () => {
+        setSearchTerm('');
+        setDevisStatusFilter('ALL');
+        setDevisDateFrom('');
+        setDevisDateTo('');
+        setDevisPage(1);
+        setDevisSortBy('createdAt');
+        setDevisSortOrder('desc');
     };
     const resetReminderFilters = () => {
         setSearchTerm('');
@@ -1533,13 +1773,18 @@ function App() {
             autoProcess: true,
         });
     };
-    const handleCompanyAssetDelete = (kind: CompanyAssetKind) => {
+    const handleCompanyAssetDelete = async (kind: CompanyAssetKind) => {
         if (!isAdmin) {
             setActionMessage(t("app.text0080"));
             return;
         }
         const label = kind === 'signature' ? t('audit.signature') : t('audit.stamp');
-        if (!window.confirm(t('audit.confirmDeleteAsset', { asset: label })))
+        if (!(await confirm({
+            title: t('audit.confirmDeleteAsset', { asset: label }),
+            confirmText: t('common.delete'),
+            cancelText: t('common.cancel'),
+            variant: 'danger',
+        })))
             return;
         setCompanyAssetDrafts((drafts) => {
             const previous = drafts[kind];
@@ -1579,7 +1824,7 @@ function App() {
         setAssetEditor(null);
         setActionMessage(t("app.text0082"));
     };
-    const handleSignInvoice = (invoice: Invoice) => {
+    const handleSignInvoice = async (invoice: Invoice) => {
         if (!isAdmin) {
             setActionMessage(t("app.text0083"));
             return;
@@ -1593,12 +1838,17 @@ function App() {
             setActionMessage(t("app.text0085"));
             return;
         }
-        if (!window.confirm(t('i18nDynamic.confirmSignInvoice', { number: invoice.invoiceNumber }))) {
+        if (!(await confirm({
+            title: t('i18nDynamic.confirmSignInvoice', { number: invoice.invoiceNumber }),
+            confirmText: t("audit.text0121"),
+            cancelText: t('common.cancel'),
+            variant: 'success',
+        }))) {
             return;
         }
         signInvoiceMutation.mutate(invoice.id);
     };
-    const handleCancelInvoiceSignature = (invoice: Invoice) => {
+    const handleCancelInvoiceSignature = async (invoice: Invoice) => {
         if (!isAdmin) {
             setActionMessage(t("app.text0086"));
             return;
@@ -1607,7 +1857,12 @@ function App() {
             setActionMessage(t("app.text0087"));
             return;
         }
-        if (!window.confirm(t('i18nDynamic.confirmCancelInvoiceSignature', { number: invoice.invoiceNumber }))) {
+        if (!(await confirm({
+            title: t('i18nDynamic.confirmCancelInvoiceSignature', { number: invoice.invoiceNumber }),
+            confirmText: t("audit.text0119"),
+            cancelText: t('common.cancel'),
+            variant: 'warning',
+        }))) {
             return;
         }
         cancelInvoiceSignatureMutation.mutate(invoice.id);
@@ -1627,6 +1882,7 @@ function App() {
             limit: EXPORT_PAGE_SIZE,
             search: searchTerm || undefined,
             status: invoiceStatusFilter === 'ALL' ? undefined : invoiceStatusFilter,
+            customerId: invoiceCustomerFilter || undefined,
             dateFrom: invoiceDateFrom || undefined,
             dateTo: invoiceDateTo || undefined,
             sortBy: invoiceSortBy,
@@ -1639,6 +1895,7 @@ function App() {
                 limit: EXPORT_PAGE_SIZE,
                 search: searchTerm || undefined,
                 status: invoiceStatusFilter === 'ALL' ? undefined : invoiceStatusFilter,
+                customerId: invoiceCustomerFilter || undefined,
                 dateFrom: invoiceDateFrom || undefined,
                 dateTo: invoiceDateTo || undefined,
                 sortBy: invoiceSortBy,
@@ -1715,6 +1972,27 @@ function App() {
         }
         catch {
             setActionMessage(t("app.text0091"));
+        }
+        finally {
+            setExportingTarget('');
+        }
+    };
+    const handleExportInvoicesExcel = async () => {
+        setExportingTarget('invoices-excel');
+        try {
+            await downloadInvoicesExcel({
+                search: searchTerm || undefined,
+                status: invoiceStatusFilter === 'ALL' ? undefined : invoiceStatusFilter,
+                customerId: invoiceCustomerFilter || undefined,
+                dateFrom: invoiceDateFrom || undefined,
+                dateTo: invoiceDateTo || undefined,
+                sortBy: invoiceSortBy,
+                sortOrder: invoiceSortOrder,
+            });
+            setActionMessage(t("app.text0420"));
+        }
+        catch {
+            setActionMessage(t("app.text0421"));
         }
         finally {
             setExportingTarget('');
@@ -1965,7 +2243,7 @@ function App() {
         }
         invoiceEmailMutation.mutate();
     };
-    const handleDeleteCustomer = (customer: Customer) => {
+    const handleDeleteCustomer = async (customer: Customer) => {
         if (!isAdmin) {
             setActionMessage(t("app.text0114"));
             return;
@@ -1976,7 +2254,12 @@ function App() {
             return;
         }
         const label = customer.company ?? customer.name;
-        if (!window.confirm(t('audit.confirmDeleteCustomer', { name: label }))) {
+        if (!(await confirm({
+            title: t('audit.confirmDeleteCustomer', { name: label }),
+            confirmText: t('common.delete'),
+            cancelText: t('common.cancel'),
+            variant: 'danger',
+        }))) {
             return;
         }
         deleteCustomerMutation.mutate(customer.id);
@@ -2072,12 +2355,37 @@ function App() {
             { description: t("app.text0027"), unit: 'forfait', quantity: 1, unitPrice: 1000, taxRate: automaticVatRate },
         ]);
     };
+    const resetDevisForm = () => {
+        setEditingDevisId('');
+        setDevisCustomerId(customerQuery.data?.data[0]?.id ?? '');
+        setDevisStatus('DRAFT');
+        setDevisIssueDate(getToday());
+        setDevisValidUntil(getDateAfterDays(30));
+        setDevisTaxRate(automaticDevisVatRate);
+        setIsVatOverride(false);
+        setDevisVatOverrideReason('');
+        setDevisDiscount(0);
+        setDevisNotes('');
+        setDevisTerms(t("audit.text0002"));
+        setDevisItems([
+            { description: t("app.text0027"), unit: 'forfait', quantity: 1, unitPrice: 1000, taxRate: automaticDevisVatRate, discount: 0 },
+        ]);
+    };
     const handleOpenInvoiceForm = () => {
         if (!hasAccessToken) {
             setActionMessage(t("app.text0118"));
             return;
         }
         setIsInvoiceFormOpen(true);
+    };
+    const handleOpenDevisForm = () => {
+        if (!hasAccessToken) {
+            setActionMessage(t("app.text0118"));
+            return;
+        }
+        setIsDevisFormOpen(true);
+        setActiveView('devis');
+        navigateAppTo(viewPaths.devis);
     };
     const handleEditInvoice = (invoice: Invoice) => {
         if (invoice.status !== 'DRAFT') {
@@ -2106,6 +2414,35 @@ function App() {
         setActiveView('invoices');
         setViewInvoiceId('');
         setActionMessage(t('i18nDynamic.editingInvoice', { number: invoice.invoiceNumber }));
+    };
+    const handleEditDevis = (devis: Devis) => {
+        if (devis.status !== 'DRAFT') {
+            setActionMessage(t('devis.onlyDraftEditable'));
+            return;
+        }
+        setEditingDevisId(devis.id);
+        setDevisCustomerId(devis.customerId);
+        setDevisStatus('DRAFT');
+        setDevisIssueDate(devis.issueDate.slice(0, 10));
+        setDevisValidUntil(devis.validUntil.slice(0, 10));
+        setDevisTaxRate(Number(devis.taxRate));
+        setIsVatOverride(Boolean(devis.vatOverridden));
+        setDevisVatOverrideReason(devis.vatOverrideReason ?? '');
+        setDevisDiscount(Number(devis.discount));
+        setDevisNotes(devis.notes ?? '');
+        setDevisTerms(devis.terms ?? '');
+        setDevisItems((devis.items ?? []).map((item) => ({
+            description: item.description,
+            unit: item.unit ?? '',
+            quantity: Number(item.quantity),
+            unitPrice: Number(item.unitPrice),
+            discount: Number(item.discount),
+            taxRate: Number(item.taxRate),
+        })));
+        setIsDevisFormOpen(true);
+        setActiveView('devis');
+        setViewDevisId('');
+        setActionMessage(t('devis.editing', { number: devis.devisNumber }));
     };
     const handleInvoiceItemChange = (index: number, field: keyof InvoiceDraftItem, value: string | number) => {
         setInvoiceItems((items) => items.map((item, itemIndex) => itemIndex === index
@@ -2138,6 +2475,37 @@ function App() {
             }
             : item));
     };
+    const handleDevisItemChange = (index: number, field: keyof DevisDraftItem, value: string | number) => {
+        setDevisItems((items) => items.map((item, itemIndex) => itemIndex === index
+            ? {
+                ...item,
+                [field]: field === 'description' || field === 'unit' ? value : Number(value),
+            }
+            : item));
+    };
+    const handleAddDevisItem = () => {
+        setDevisItems((items) => [
+            ...items,
+            { description: '', unit: 'unite', quantity: 1, unitPrice: 0, taxRate: effectiveDevisVatRate, discount: 0 },
+        ]);
+    };
+    const handleRemoveDevisItem = (index: number) => {
+        setDevisItems((items) => items.filter((_, itemIndex) => itemIndex !== index));
+    };
+    const handleApplyProductToDevisItem = (index: number, productId: string) => {
+        const product = productQuery.data?.data.find((item) => item.id === productId);
+        if (!product)
+            return;
+        setDevisItems((items) => items.map((item, itemIndex) => itemIndex === index
+            ? {
+                ...item,
+                description: product.description || product.name,
+                unit: product.unit ?? item.unit,
+                unitPrice: Number(product.unitPrice),
+                taxRate: effectiveDevisVatRate,
+            }
+            : item));
+    };
     const handleCreateInvoice = (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         if (!invoiceCustomerId) {
@@ -2158,6 +2526,87 @@ function App() {
         }
         invoiceMutation.mutate();
     };
+    const handleCreateDevis = (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        if (!devisCustomerId) {
+            setActionMessage(t("app.text0120"));
+            return;
+        }
+        if (devisItems.some((item) => !item.description.trim() || item.quantity <= 0 || item.unitPrice < 0 || item.discount < 0)) {
+            setActionMessage(t('devis.invalidItems'));
+            return;
+        }
+        if (new Date(devisValidUntil) < new Date(devisIssueDate)) {
+            setActionMessage(t('devis.invalidDates'));
+            return;
+        }
+        if (isVatOverride && !isAdmin) {
+            setActionMessage(t("app.text0122"));
+            return;
+        }
+        if (isVatOverride && !devisVatOverrideReason.trim()) {
+            setActionMessage(t("app.text0123"));
+            return;
+        }
+        devisMutation.mutate();
+    };
+    const handleDeleteDraftDevis = useCallback(async () => {
+        if (await confirm({
+            title: t('devis.confirmDeleteDrafts'),
+            confirmText: t('common.delete'),
+            cancelText: t('common.cancel'),
+            variant: 'danger',
+        })) {
+            deleteDraftDevisMutation.mutate();
+        }
+    }, [confirm, deleteDraftDevisMutation, t]);
+    const handleConfirmedDevisAction = useCallback(async (devis: Devis, action: 'delete' | 'reject' | 'convert' | 'sign' | 'cancelSignature') => {
+        const options = {
+            delete: {
+                title: t('devis.confirmDelete', { number: devis.devisNumber }),
+                confirmText: t('common.delete'),
+                variant: 'danger' as const,
+            },
+            reject: {
+                title: t('devis.confirmReject'),
+                confirmText: t('devis.reject'),
+                variant: 'warning' as const,
+            },
+            convert: {
+                title: t('devis.confirmConvert'),
+                confirmText: t('devis.createInvoice'),
+                variant: 'success' as const,
+            },
+            sign: {
+                title: t('devis.confirmSign', { number: devis.devisNumber }),
+                confirmText: t('devis.sign'),
+                variant: 'success' as const,
+            },
+            cancelSignature: {
+                title: t('devis.confirmCancelSignature'),
+                confirmText: t('devis.cancelSignature'),
+                variant: 'warning' as const,
+            },
+        }[action];
+        if (await confirm({
+            ...options,
+            cancelText: t('common.cancel'),
+        })) {
+            devisActionMutation.mutate({ devisId: devis.id, action });
+        }
+    }, [confirm, devisActionMutation, t]);
+    const handleDeleteRbacRole = useCallback(async (role: { id: string; name: string }) => {
+        if (await confirm({
+            title: t('i18nDynamic.confirmDeleteRole', { name: role.name }),
+            confirmText: t('common.delete'),
+            cancelText: t('common.cancel'),
+            variant: 'danger',
+        })) {
+            deleteRbacRole(role.id)
+                .then(() => queryClient.invalidateQueries({ queryKey: ['rbac', 'roles'] }))
+                .catch((error) => setActionMessage(getApiErrorMessage(error, t("audit.text0066"))));
+        }
+    }, [confirm, queryClient, setActionMessage, t]);
     const loginErrorMessage = loginValidationError ||
         (loginMutation.isError
             ? getApiErrorMessage(loginMutation.error, t("audit.text0022"))
@@ -2298,9 +2747,9 @@ function App() {
         }} onPasswordChange={setPassword} password={password} user={currentUserQuery.data}/>
                 </div>
               </div>
-              <button className="primary-action inline-flex h-9 shrink-0 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-white shadow-sm transition hover:bg-primary/90" onClick={handleOpenInvoiceForm} type="button">
+              <button className="primary-action inline-flex h-9 shrink-0 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-white shadow-sm transition hover:bg-primary/90" onClick={activeView === 'devis' ? handleOpenDevisForm : handleOpenInvoiceForm} type="button">
                 <FilePlus2 className="h-4 w-4"/>
-                <span className="hidden sm:inline">{t("app.text0136")}</span>
+                <span className="hidden sm:inline">{activeView === 'devis' ? t('devis.create') : t("app.text0136")}</span>
               </button>
           </div>
         </header>
@@ -2310,6 +2759,12 @@ function App() {
               <option value="ALL">{t("app.text0137")}</option>
               {Object.entries(statusLabelKeys).map(([status, labelKey]) => (<option key={status} value={status}>
                   {t(labelKey)}
+                </option>))}
+            </select>
+            <select className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm outline-none ring-primary/20 transition focus:ring-4" onChange={(event) => setInvoiceCustomerFilter(event.target.value)} value={invoiceCustomerFilter}>
+              <option value="">{t("app.text0419")}</option>
+              {(customerQuery.data?.data ?? []).map((customer) => (<option key={customer.id} value={customer.id}>
+                  {customer.company ?? customer.name}
                 </option>))}
             </select>
             <input className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm outline-none ring-primary/20 transition focus:ring-4" onChange={(event) => setInvoiceDateFrom(event.target.value)} title={t("app.text0138")} type="date" value={invoiceDateFrom}/>
@@ -2327,6 +2782,29 @@ function App() {
               <option value="asc">{t("app.text0147")}</option>
             </select>
             <button className="h-9 rounded-md border border-slate-200 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50" onClick={resetInvoiceFilters} type="button">{t("app.text0148")}</button>
+          </section>) : null}
+
+        {activeView === 'devis' ? (<section className="view-filter-bar flex flex-wrap items-center gap-2 border-b border-slate-200 px-4 py-3 md:px-8">
+            <select className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm outline-none ring-primary/20 transition focus:ring-4" onChange={(event) => setDevisStatusFilter(event.target.value as DevisStatus | 'ALL')} value={devisStatusFilter}>
+              <option value="ALL">{t("app.text0137")}</option>
+              {Object.entries(devisStatusLabelKeys).map(([status, labelKey]) => (<option key={status} value={status}>
+                  {t(labelKey)}
+                </option>))}
+            </select>
+            <input className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm outline-none ring-primary/20 transition focus:ring-4" onChange={(event) => setDevisDateFrom(event.target.value)} title={t("app.text0138")} type="date" value={devisDateFrom}/>
+            <input className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm outline-none ring-primary/20 transition focus:ring-4" onChange={(event) => setDevisDateTo(event.target.value)} title={t("app.text0139")} type="date" value={devisDateTo}/>
+            <select className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm outline-none ring-primary/20 transition focus:ring-4" onChange={(event) => setDevisSortBy(event.target.value as DevisSortField)} value={devisSortBy}>
+              <option value="createdAt">{t("app.text0140")}</option>
+              <option value="issueDate">{t("app.text0141")}</option>
+              <option value="validUntil">{t("devis.validUntil")}</option>
+              <option value="total">{t("app.text0143")}</option>
+              <option value="devisNumber">{t("devis.number")}</option>
+            </select>
+            <select className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm outline-none ring-primary/20 transition focus:ring-4" onChange={(event) => setDevisSortOrder(event.target.value as 'asc' | 'desc')} value={devisSortOrder}>
+              <option value="desc">{t("app.text0146")}</option>
+              <option value="asc">{t("app.text0147")}</option>
+            </select>
+            <button className="h-9 rounded-md border border-slate-200 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50" onClick={resetDevisFilters} type="button">{t("app.text0148")}</button>
           </section>) : null}
 
         {activeView === 'payments' ? (<section className="view-filter-bar flex flex-wrap items-center gap-2 border-b border-slate-200 px-4 py-3 md:px-8">
@@ -2544,6 +3022,158 @@ function App() {
               </form>
             </section>) : null}
 
+          {isDevisFormOpen ? (<section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <h2 className="text-base font-semibold">
+                    {editingDevisId ? t('devis.editTitle') : t('devis.create')}
+                  </h2>
+                  <p className="text-sm text-slate-500">
+                    {editingDevisId ? t('devis.editDescription') : t('devis.createDescription')}
+                  </p>
+                </div>
+                <button className="h-9 rounded-md border border-slate-200 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50" onClick={() => setIsDevisFormOpen(false)} type="button">{t("app.text0160")}</button>
+              </div>
+
+              <form className="mt-5 space-y-5" onSubmit={handleCreateDevis}>
+                <div className="grid gap-3 md:grid-cols-5">
+                  <label className="text-sm font-medium text-slate-700 md:col-span-2">{t("app.text0161")}<select className="mt-1 h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none ring-primary/20 transition focus:ring-4" onChange={(event) => setDevisCustomerId(event.target.value)} value={devisCustomerId}>
+                      <option value="">{t("app.text0162")}</option>
+                      {(customerQuery.data?.data ?? []).map((customer) => (<option key={customer.id} value={customer.id}>
+                          {formatCustomerName(customer)}
+                        </option>))}
+                    </select>
+                  </label>
+                  <label className="text-sm font-medium text-slate-700">{t("app.text0163")}<select className="mt-1 h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none ring-primary/20 transition focus:ring-4" onChange={(event) => setDevisStatus(event.target.value as Extract<DevisStatus, 'DRAFT' | 'SENT' | 'APPROVED'>)} value={devisStatus}>
+                      <option value="DRAFT">{t("devis.status.draft")}</option>
+                      <option value="SENT">{t("devis.status.sent")}</option>
+                      <option value="APPROVED">{t("devis.status.approved")}</option>
+                    </select>
+                  </label>
+                  <label className="text-sm font-medium text-slate-700">{t("app.text0141")}<input className="mt-1 h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none ring-primary/20 transition focus:ring-4" onChange={(event) => setDevisIssueDate(event.target.value)} type="date" value={devisIssueDate}/>
+                  </label>
+                  <label className="text-sm font-medium text-slate-700">{t("devis.validUntil")}<input className="mt-1 h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none ring-primary/20 transition focus:ring-4" onChange={(event) => setDevisValidUntil(event.target.value)} type="date" value={devisValidUntil}/>
+                  </label>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[1060px] text-left text-sm">
+                    <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                      <tr>
+                        <th className="px-3 py-3 font-medium">{t("app.text0012")}</th>
+                        <th className="px-3 py-3 font-medium">{t("app.text0166")}</th>
+                        <th className="px-3 py-3 font-medium">{t("app.text0167")}</th>
+                        <th className="px-3 py-3 text-right font-medium">{t("app.text0168")}</th>
+                        <th className="px-3 py-3 text-right font-medium">{t("app.text0169")}</th>
+                        <th className="px-3 py-3 text-right font-medium">{t("devis.lineDiscount")}</th>
+                        <th className="px-3 py-3 text-right font-medium">{t("app.text0170")}</th>
+                        <th className="px-3 py-3 text-right font-medium">{t("app.text0143")}</th>
+                        <th className="w-12 px-3 py-3"/>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {devisItems.map((item, index) => (<tr key={index}>
+                          <td className="px-3 py-3">
+                            <select className="h-9 w-44 rounded-md border border-slate-200 bg-white px-2 text-sm outline-none ring-primary/20 transition focus:ring-4" onChange={(event) => handleApplyProductToDevisItem(index, event.target.value)} value="">
+                              <option value="">{t("app.text0171")}</option>
+                              {(productQuery.data?.data ?? []).map((product) => (<option key={product.id} value={product.id}>
+                                  {product.name}
+                                </option>))}
+                            </select>
+                          </td>
+                          <td className="px-3 py-3">
+                            <input className="h-9 w-full rounded-md border border-slate-200 px-2 text-sm outline-none ring-primary/20 transition focus:ring-4" onChange={(event) => handleDevisItemChange(index, 'description', event.target.value)} placeholder={t("app.text0166")} value={item.description}/>
+                          </td>
+                          <td className="px-3 py-3">
+                            <input className="h-9 w-full rounded-md border border-slate-200 px-2 text-sm outline-none ring-primary/20 transition focus:ring-4" onChange={(event) => handleDevisItemChange(index, 'unit', event.target.value)} placeholder={t("app.text0172")} value={item.unit ?? ''}/>
+                          </td>
+                          <td className="px-3 py-3">
+                            <input className="h-9 w-24 rounded-md border border-slate-200 px-2 text-right text-sm outline-none ring-primary/20 transition focus:ring-4" min="0.01" onChange={(event) => handleDevisItemChange(index, 'quantity', event.target.value)} step="0.01" type="number" value={item.quantity}/>
+                          </td>
+                          <td className="px-3 py-3">
+                            <input className="h-9 w-28 rounded-md border border-slate-200 px-2 text-right text-sm outline-none ring-primary/20 transition focus:ring-4" min="0" onChange={(event) => handleDevisItemChange(index, 'unitPrice', event.target.value)} step="0.01" type="number" value={item.unitPrice}/>
+                          </td>
+                          <td className="px-3 py-3">
+                            <input className="h-9 w-24 rounded-md border border-slate-200 px-2 text-right text-sm outline-none ring-primary/20 transition focus:ring-4" min="0" onChange={(event) => handleDevisItemChange(index, 'discount', event.target.value)} step="0.01" type="number" value={item.discount}/>
+                          </td>
+                          <td className="px-3 py-3">
+                            <input className="h-9 w-20 rounded-md border border-slate-200 bg-slate-50 px-2 text-right text-sm outline-none" disabled min="0" step="0.01" type="number" value={effectiveDevisVatRate}/>
+                          </td>
+                          <td className="px-3 py-3 text-right font-semibold">
+                            {formatCurrency(calculateDevisItemTotal(item, effectiveDevisVatRate))}
+                          </td>
+                          <td className="px-3 py-3 text-right">
+                            <button className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 disabled:opacity-40" disabled={devisItems.length === 1} onClick={() => handleRemoveDevisItem(index)} title={t("app.text0173")} type="button">
+                              <Trash2 className="h-4 w-4"/>
+                            </button>
+                          </td>
+                        </tr>))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <button className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-200 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50" onClick={handleAddDevisItem} type="button">
+                    <Plus className="h-4 w-4"/>{t("app.text0174")}</button>
+
+                  <div className="w-full max-w-sm space-y-3">
+                    <div className="rounded-md border border-slate-200 bg-white p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-semibold uppercase text-slate-500">{t("app.text0175")}</p>
+                          <p className="text-sm font-semibold text-slate-900">
+                            {effectiveDevisVatRate}% - {selectedDevisCustomer?.countryCode === 'MA' ? 'Maroc' : t("audit.text0043")}
+                          </p>
+                        </div>
+                        {isAdmin ? (<label className="flex items-center gap-2 text-xs font-medium text-slate-600">
+                            <input checked={isVatOverride} className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary" onChange={(event) => {
+                    setIsVatOverride(event.target.checked);
+                    if (!event.target.checked) {
+                        setDevisTaxRate(automaticDevisVatRate);
+                        setDevisVatOverrideReason('');
+                    }
+                }} type="checkbox"/>{t("app.text0176")}</label>) : null}
+                      </div>
+                      {isVatOverride ? (<div className="mt-3 space-y-2">
+                          <label className="text-xs font-medium text-slate-600">{t("app.text0177")}<input className="mt-1 h-9 w-full rounded-md border border-slate-200 px-2 text-right text-sm outline-none ring-primary/20 transition focus:ring-4" min="0" onChange={(event) => setDevisTaxRate(Number(event.target.value))} step="0.01" type="number" value={devisTaxRate}/>
+                          </label>
+                          <textarea className="min-h-16 w-full rounded-md border border-slate-200 p-2 text-xs outline-none ring-primary/20 transition focus:ring-4" onChange={(event) => setDevisVatOverrideReason(event.target.value)} placeholder={t("app.text0178")} value={devisVatOverrideReason}/>
+                        </div>) : null}
+                    </div>
+                    <label className="text-xs font-medium text-slate-600">{t("app.text0179")}<input className="mt-1 h-9 w-full rounded-md border border-slate-200 px-2 text-right text-sm outline-none ring-primary/20 transition focus:ring-4" min="0" onChange={(event) => setDevisDiscount(Number(event.target.value))} step="0.01" type="number" value={devisDiscount}/>
+                    </label>
+                    <div className="rounded-md bg-slate-50 p-3 text-sm">
+                      <div className="flex justify-between">
+                        <span>{t("app.text0180")}</span>
+                        <span>{formatCurrency(devisTotals.subtotal)}</span>
+                      </div>
+                      <div className="mt-1 flex justify-between">
+                        <span>{t("app.text0181")}{effectiveDevisVatRate}%</span>
+                        <span>{formatCurrency(devisTotals.taxAmount)}</span>
+                      </div>
+                      <div className="mt-2 flex justify-between border-t border-slate-200 pt-2 font-semibold">
+                        <span>{t("app.text0182")}</span>
+                        <span>{formatCurrency(devisTotals.total)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <textarea className="min-h-24 rounded-md border border-slate-200 p-3 text-sm outline-none ring-primary/20 transition focus:ring-4" onChange={(event) => setDevisNotes(event.target.value)} placeholder={t("app.text0183")} value={devisNotes}/>
+                  <textarea className="min-h-24 rounded-md border border-slate-200 p-3 text-sm outline-none ring-primary/20 transition focus:ring-4" onChange={(event) => setDevisTerms(event.target.value)} placeholder={t("app.text0184")} value={devisTerms}/>
+                </div>
+
+                <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                  <button className="h-9 rounded-md border border-slate-200 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50" onClick={resetDevisForm} type="button">{t("app.text0148")}</button>
+                  <button className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-white transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60" disabled={devisMutation.isPending} type="submit">
+                    <FilePlus2 className="h-4 w-4"/>
+                    {devisMutation.isPending ? t('auditFinal.saving') : editingDevisId ? t('common.save') : t('devis.saveDraft')}
+                  </button>
+                </div>
+              </form>
+            </section>) : null}
+
           {activeView === 'dashboard' && dashboardStats && !dashboardQuery.isLoading && !dashboardQuery.isError ? (<section className="space-y-4">
               <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.55fr)]">
                 <DashboardPanel description={t('i18nDynamic.revenueUnpaidMonths', { count: dashboardMonths })} title={t("app.text0185")}>
@@ -2666,6 +3296,85 @@ function App() {
               </div>
             </section>) : null}
 
+          {activeView === 'devis' ? (<section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+              <div className="flex flex-col gap-3 border-b border-slate-200 p-5 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h2 className="text-base font-semibold">{t('devis.listTitle')}</h2>
+                  <p className="text-sm text-slate-500">
+                    {t('devis.listSummary', {
+                        visible: devisQuery.data?.data.length ?? 0,
+                        total: devisQuery.data?.meta.total ?? 0,
+                    })}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {hasPermission('devis.delete') ? (<button className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-rose-200 px-3 text-sm font-medium text-rose-600 transition hover:bg-rose-50 disabled:opacity-60" disabled={deleteDraftDevisMutation.isPending} onClick={handleDeleteDraftDevis} type="button">
+                    <Trash2 className="h-4 w-4"/>{t('devis.deleteDrafts')}
+                  </button>) : null}
+                  <button className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-white transition hover:bg-primary/90" onClick={handleOpenDevisForm} type="button">
+                    <FilePlus2 className="h-4 w-4"/>{t('devis.create')}
+                  </button>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[980px] text-left text-sm">
+                  <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                    <tr>
+                      <th className="px-5 py-3 font-medium">{t('devis.number')}</th>
+                      <th className="px-5 py-3 font-medium">{t("app.text0161")}</th>
+                      <th className="px-5 py-3 font-medium">{t("app.text0141")}</th>
+                      <th className="px-5 py-3 font-medium">{t('devis.validUntil')}</th>
+                      <th className="px-5 py-3 font-medium">{t("app.text0163")}</th>
+                      <th className="px-5 py-3 text-right font-medium">{t("app.text0143")}</th>
+                      <th className="px-5 py-3 font-medium">{t('devis.linkedInvoice')}</th>
+                      <th className="px-5 py-3 text-right font-medium">{t('devis.actions')}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {devisQuery.isLoading ? (<tr><td className="px-5 py-6 text-slate-500" colSpan={8}>{t("app.text0400")}</td></tr>) : null}
+                    {(devisQuery.data?.data ?? []).map((devis) => (<tr className="hover:bg-slate-50" key={devis.id}>
+                        <td className="px-5 py-4">
+                          <button className="font-semibold text-slate-950 transition hover:text-primary" onClick={() => setViewDevisId(devis.id)} type="button">{devis.devisNumber}</button>
+                        </td>
+                        <td className="px-5 py-4 text-slate-600">{devis.customer?.company ?? devis.customer?.name ?? t('auditFinal.clientFallback')}</td>
+                        <td className="px-5 py-4 text-slate-600">{formatShortDate(devis.issueDate)}</td>
+                        <td className="px-5 py-4 text-slate-600">{formatShortDate(devis.validUntil)}</td>
+                        <td className="px-5 py-4">
+                          <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${devisStatusClasses[devis.status]}`}>
+                            {getDevisStatusLabel(devis.status)}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4 text-right font-semibold">{formatCurrency(Number(devis.total), devis.currency)}</td>
+                        <td className="px-5 py-4">
+                          {devis.generatedInvoice ? (<button className="font-medium text-primary hover:underline" onClick={() => setViewInvoiceId(devis.generatedInvoice!.id)} type="button">
+                              {devis.generatedInvoice.invoiceNumber}
+                            </button>) : (<span className="text-slate-400">-</span>)}
+                        </td>
+                        <td className="px-5 py-4">
+                          <div className="flex flex-wrap justify-end gap-2">
+                            {devis.status === 'DRAFT' && hasPermission('devis.update') ? (<button className="h-8 rounded-md border border-slate-200 px-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50" onClick={() => handleEditDevis(devis)} type="button">{t("app.text0232")}</button>) : null}
+                            {devis.status === 'DRAFT' && hasPermission('devis.delete') ? (<button className="h-8 rounded-md border border-rose-200 px-2 text-xs font-medium text-rose-600 transition hover:bg-rose-50 disabled:opacity-60" disabled={devisActionMutation.isPending} onClick={() => handleConfirmedDevisAction(devis, 'delete')} type="button">{t('common.delete')}</button>) : null}
+                            {devis.status === 'DRAFT' ? (<button className="h-8 rounded-md border border-slate-200 px-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50" onClick={() => devisActionMutation.mutate({ devisId: devis.id, action: 'send' })} type="button">{t("app.text0202")}</button>) : null}
+                            {devis.status === 'SENT' ? (<button className="h-8 rounded-md border border-emerald-200 px-2 text-xs font-medium text-emerald-700 transition hover:bg-emerald-50" onClick={() => devisActionMutation.mutate({ devisId: devis.id, action: 'approve' })} type="button">{t('devis.approve')}</button>) : null}
+                            {devis.status === 'SENT' || devis.status === 'APPROVED' ? (<button className="h-8 rounded-md border border-rose-200 px-2 text-xs font-medium text-rose-600 transition hover:bg-rose-50" onClick={() => handleConfirmedDevisAction(devis, 'reject')} type="button">{t('devis.reject')}</button>) : null}
+                            {(devis.status === 'DRAFT' || devis.status === 'APPROVED') && !devis.isSigned && hasPermission('devis.sign') ? (<button className="h-8 rounded-md border border-emerald-200 px-2 text-xs font-medium text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-60" disabled={devisActionMutation.isPending} onClick={() => handleConfirmedDevisAction(devis, 'sign')} type="button">{t('devis.sign')}</button>) : null}
+                            {devis.isSigned && hasPermission('devis.sign') ? (<button className="h-8 rounded-md border border-slate-200 px-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60" disabled={devisActionMutation.isPending} onClick={() => handleConfirmedDevisAction(devis, 'cancelSignature')} type="button">{t('devis.cancelSignature')}</button>) : null}
+                            {devis.status === 'APPROVED' ? (<button className="h-8 rounded-md bg-primary px-2 text-xs font-medium text-white transition hover:bg-primary/90" onClick={() => handleConfirmedDevisAction(devis, 'convert')} type="button">{t('devis.createInvoice')}</button>) : null}
+                            <button className="h-8 rounded-md border border-slate-200 px-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50" onClick={() => downloadDevisPdf(devis.id, devis.devisNumber)} type="button">{t('i18nDynamic.pdf')}</button>
+                          </div>
+                        </td>
+                      </tr>))}
+                  </tbody>
+                </table>
+              </div>
+              {!devisQuery.isLoading && (devisQuery.data?.data.length ?? 0) === 0 ? (<p className="p-5 text-sm text-slate-500">{t('devis.empty')}</p>) : null}
+              {(devisQuery.data?.meta.totalPages ?? 0) > 1 ? (<div className="flex items-center justify-between border-t border-slate-200 p-4 text-sm">
+                  <button className="h-9 rounded-md border border-slate-200 px-3 font-medium text-slate-700 disabled:opacity-40" disabled={devisPage <= 1} onClick={() => setDevisPage((page) => Math.max(1, page - 1))} type="button">{t("audit.text0070")}</button>
+                  <span className="text-slate-500">{devisPage} / {devisQuery.data?.meta.totalPages}</span>
+                  <button className="h-9 rounded-md border border-slate-200 px-3 font-medium text-slate-700 disabled:opacity-40" disabled={devisPage >= (devisQuery.data?.meta.totalPages ?? 1)} onClick={() => setDevisPage((page) => page + 1)} type="button">{t("audit.text0071")}</button>
+                </div>) : null}
+            </section>) : null}
+
           {activeView === 'dashboard' || activeView === 'invoices' ? (<section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.7fr)]">
             <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
               <div className="flex items-center justify-between border-b border-slate-200 p-5">
@@ -2676,7 +3385,7 @@ function App() {
                         visible: invoices.length,
                         total: invoiceQuery.data?.meta.total ?? invoices.length,
                     })}
-                    {(searchTerm || invoiceStatusFilter !== 'ALL' || invoiceDateFrom || invoiceDateTo)
+                    {(searchTerm || invoiceStatusFilter !== 'ALL' || invoiceCustomerFilter || invoiceDateFrom || invoiceDateTo)
                 ? t('audit.withFilters')
                 : ''}
                     .
@@ -2692,6 +3401,10 @@ function App() {
                 {activeView === 'invoices' ? (<button className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60" disabled={exportingTarget === 'invoices'} onClick={handleExportInvoices} type="button">
                     <Download className="h-4 w-4"/>
                     {exportingTarget === 'invoices' ? t('i18nDynamic.exporting') : t('i18nDynamic.export')}
+                  </button>) : null}
+                {activeView === 'invoices' ? (<button className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60" disabled={exportingTarget === 'invoices-excel'} onClick={handleExportInvoicesExcel} type="button">
+                    <Download className="h-4 w-4"/>
+                    {exportingTarget === 'invoices-excel' ? t('i18nDynamic.exporting') : t("app.text0418")}
                   </button>) : null}
               </div>
               <div className="overflow-x-auto">
@@ -3099,11 +3812,7 @@ function App() {
                           <span className="block truncate text-sm font-semibold">{role.name}</span>
                           <span className="block text-xs text-slate-500">{role._count?.users ?? 0}{t("app.text0256")}</span>
                         </button>
-                        {!role.isSystem ? (<button aria-label={t('i18nDynamic.deleteRoleAria', { name: role.name })} className="rounded-md p-2 text-rose-600 hover:bg-rose-50" onClick={() => {
-                        if (window.confirm(t('i18nDynamic.confirmDeleteRole', { name: role.name }))) {
-                            deleteRbacRole(role.id).then(() => queryClient.invalidateQueries({ queryKey: ['rbac', 'roles'] })).catch((error) => setActionMessage(getApiErrorMessage(error, t("audit.text0066"))));
-                        }
-                    }} title={t("app.text0257")} type="button">
+                        {!role.isSystem ? (<button aria-label={t('i18nDynamic.deleteRoleAria', { name: role.name })} className="rounded-md p-2 text-rose-600 hover:bg-rose-50" onClick={() => handleDeleteRbacRole(role)} title={t("app.text0257")} type="button">
                             <Trash2 className="h-4 w-4"/>
                           </button>) : null}
                       </div>))}
@@ -3758,7 +4467,8 @@ function App() {
             </section>) : null}
         </div>
       </section>
-      {viewInvoiceId ? (<InvoiceDetailPanel invoice={invoiceDetailQuery.data} isLoading={invoiceDetailQuery.isLoading} canSignInvoices={isAdmin} companySettings={companySettingsQuery.data} isCancelSignaturePending={cancelInvoiceSignatureMutation.isPending} onClose={() => setViewInvoiceId('')} onCancelSignature={handleCancelInvoiceSignature} onDownload={(invoice) => downloadInvoicePdf(invoice.id, invoice.invoiceNumber)} onEdit={handleEditInvoice} onEmail={openInvoiceEmailModal} onPaymentSubmit={handleRecordDetailPayment} onPrint={handlePrintInvoicePdf} onStatusChange={(invoice, status) => invoiceStatusMutation.mutate({
+      {viewDevisId ? (<DevisDetailPanel canDeleteDevis={hasPermission('devis.delete')} canSignDevis={hasPermission('devis.sign')} canUpdateDevis={hasPermission('devis.update')} devis={devisDetailQuery.data} isLoading={devisDetailQuery.isLoading} isActionPending={devisActionMutation.isPending} onApprove={(devis) => devisActionMutation.mutate({ devisId: devis.id, action: 'approve' })} onCancelSignature={(devis) => handleConfirmedDevisAction(devis, 'cancelSignature')} onClose={() => setViewDevisId('')} onConvert={(devis) => handleConfirmedDevisAction(devis, 'convert')} onDelete={(devis) => handleConfirmedDevisAction(devis, 'delete')} onDownload={(devis) => downloadDevisPdf(devis.id, devis.devisNumber)} onEdit={handleEditDevis} onOpenInvoice={(invoiceId) => setViewInvoiceId(invoiceId)} onReject={(devis) => handleConfirmedDevisAction(devis, 'reject')} onSend={(devis) => devisActionMutation.mutate({ devisId: devis.id, action: 'send' })} onSign={(devis) => handleConfirmedDevisAction(devis, 'sign')}/>) : null}
+      {viewInvoiceId ? (<InvoiceDetailPanel invoice={invoiceDetailQuery.data} isLoading={invoiceDetailQuery.isLoading} canSignInvoices={isAdmin} companySettings={companySettingsQuery.data} isCancelSignaturePending={cancelInvoiceSignatureMutation.isPending} onClose={() => setViewInvoiceId('')} onCancelSignature={handleCancelInvoiceSignature} onDownload={(invoice) => downloadInvoicePdf(invoice.id, invoice.invoiceNumber)} onEdit={handleEditInvoice} onEmail={openInvoiceEmailModal} onOpenDevis={(devisId) => setViewDevisId(devisId)} onPaymentSubmit={handleRecordDetailPayment} onPrint={handlePrintInvoicePdf} onStatusChange={(invoice, status) => invoiceStatusMutation.mutate({
                 invoiceId: invoice.id,
                 status,
             })} onSign={handleSignInvoice} onPrepareReminder={(invoice) => handlePrepareReminder({
@@ -4770,6 +5480,7 @@ type InvoiceDetailPanelProps = {
     onDownload: (invoice: Invoice) => void;
     onEmail: (invoice: Invoice) => void;
     onEdit: (invoice: Invoice) => void;
+    onOpenDevis: (devisId: string) => void;
     onPaymentSubmit: (event: FormEvent<HTMLFormElement>, invoice: Invoice) => void;
     onPrint: (invoice: Invoice) => void;
     onPrepareReminder: (invoice: Invoice) => void;
@@ -4784,7 +5495,122 @@ type InvoiceDetailPanelProps = {
     setPaymentMethod: (value: PaymentMethod) => void;
     setPaymentReference: (value: string) => void;
 };
-function InvoiceDetailPanel({ invoice, isLoading, canSignInvoices, companySettings, isCancelSignaturePending, isEmailPending, isPaymentPending, isSignPending, isStatusPending, onClose, onCancelSignature, onDownload, onEmail, onEdit, onPaymentSubmit, onPrint, onPrepareReminder, onSign, onStatusChange, paymentAmount, paymentEntryDate, paymentMethod, paymentReference, setPaymentAmount, setPaymentEntryDate, setPaymentMethod, setPaymentReference, }: InvoiceDetailPanelProps) {
+type DevisDetailPanelProps = {
+    canDeleteDevis: boolean;
+    canSignDevis: boolean;
+    canUpdateDevis: boolean;
+    devis?: Devis;
+    isLoading: boolean;
+    isActionPending: boolean;
+    onApprove: (devis: Devis) => void;
+    onCancelSignature: (devis: Devis) => void;
+    onClose: () => void;
+    onConvert: (devis: Devis) => void;
+    onDelete: (devis: Devis) => void;
+    onDownload: (devis: Devis) => void;
+    onEdit: (devis: Devis) => void;
+    onOpenInvoice: (invoiceId: string) => void;
+    onReject: (devis: Devis) => void;
+    onSend: (devis: Devis) => void;
+    onSign: (devis: Devis) => void;
+};
+function DevisDetailPanel({ canDeleteDevis, canSignDevis, canUpdateDevis, devis, isLoading, isActionPending, onApprove, onCancelSignature, onClose, onConvert, onDelete, onDownload, onEdit, onOpenInvoice, onReject, onSend, onSign, }: DevisDetailPanelProps) {
+    const canSign = Boolean(devis && canSignDevis && !devis.isSigned && (devis.status === 'DRAFT' || devis.status === 'APPROVED' || devis.status === 'CONVERTED'));
+    const canCancelSignature = Boolean(devis && canSignDevis && devis.isSigned);
+    return (<aside className="fixed inset-y-0 right-0 z-30 flex w-full max-w-2xl flex-col border-l border-slate-200 bg-white shadow-2xl">
+      <div className="flex items-start justify-between gap-3 border-b border-slate-200 p-5">
+        <div>
+          <p className="text-xs font-semibold uppercase text-slate-500">{t('devis.quote')}</p>
+          <h2 className="text-xl font-semibold text-slate-950">{devis?.devisNumber ?? t('common.loading')}</h2>
+        </div>
+        <button className="h-9 rounded-md border border-slate-200 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50" onClick={onClose} type="button">{t("app.text0160")}</button>
+      </div>
+      {isLoading || !devis ? (<div className="p-5 text-sm text-slate-500">{t("app.text0400")}</div>) : (<div className="flex-1 overflow-y-auto p-5">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <DetailMetric label={t("app.text0143")} value={formatCurrency(Number(devis.total), devis.currency)}/>
+            <DetailMetric label={t("app.text0180")} value={formatCurrency(Number(devis.subtotal), devis.currency)}/>
+            <DetailMetric label={t("app.text0170")} value={`${Number(devis.taxRate)}%`}/>
+          </div>
+          <section className="mt-5 rounded-lg border border-slate-200 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-slate-950">
+                  {devis.customer?.company ?? devis.customer?.name ?? t('auditFinal.clientFallback')}
+                </p>
+                <p className="text-sm text-slate-500">{devis.customer?.email}</p>
+                <p className="mt-2 text-xs text-slate-500">{t("app.text0401")}{formatShortDate(devis.issueDate)}</p>
+                <p className="text-xs text-slate-500">{t('devis.validUntil')}: {formatShortDate(devis.validUntil)}</p>
+              </div>
+              <span className={`inline-flex w-fit rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${devisStatusClasses[devis.status]}`}>
+                {getDevisStatusLabel(devis.status)}
+              </span>
+            </div>
+            {devis.generatedInvoice ? (<button className="mt-4 text-sm font-medium text-primary hover:underline" onClick={() => onOpenInvoice(devis.generatedInvoice!.id)} type="button">
+                {t('devis.linkedInvoice')}: {devis.generatedInvoice.invoiceNumber}
+              </button>) : null}
+            {devis.isSigned ? (<div className="mt-4 rounded-md bg-emerald-50 p-3 text-sm text-emerald-800">
+                <p className="font-medium">{t('devis.signedStatus')}</p>
+                <p className="mt-1">{t('devis.signedBy', { user: devis.signedBy?.name ?? t('auditFinal.userFallback'), date: devis.signedAt ? formatShortDate(devis.signedAt) : t("audit.text0118") })}</p>
+              </div>) : null}
+          </section>
+          <section className="mt-5 rounded-lg border border-slate-200">
+            <div className="border-b border-slate-200 px-4 py-3">
+              <h3 className="text-sm font-semibold">{t('devis.items')}</h3>
+            </div>
+            {(devis.items ?? []).map((item) => (<div className="grid gap-2 border-b border-slate-100 p-4 text-sm last:border-b-0 sm:grid-cols-[1fr_auto]" key={item.id}>
+                <div>
+                  <p className="font-medium text-slate-950">{item.description}</p>
+                  <p className="text-xs text-slate-500">
+                    {Number(item.quantity)} {item.unit ?? ''} x {formatCurrency(Number(item.unitPrice), devis.currency)}
+                    {Number(item.discount) > 0 ? ` - ${formatCurrency(Number(item.discount), devis.currency)}` : ''}
+                  </p>
+                </div>
+                <p className="font-semibold">{formatCurrency(Number(item.lineTotal), devis.currency)}</p>
+              </div>))}
+          </section>
+          <section className="mt-5 rounded-lg border border-slate-200 p-4 text-sm">
+            <div className="flex justify-between">
+              <span>{t("app.text0180")}</span>
+              <span>{formatCurrency(Number(devis.subtotal), devis.currency)}</span>
+            </div>
+            <div className="mt-1 flex justify-between">
+              <span>{t("app.text0181")}{Number(devis.taxRate)}%</span>
+              <span>{formatCurrency(Number(devis.taxAmount), devis.currency)}</span>
+            </div>
+            {Number(devis.discount) > 0 ? (<div className="mt-1 flex justify-between">
+                <span>{t("app.text0179")}</span>
+                <span>-{formatCurrency(Number(devis.discount), devis.currency)}</span>
+              </div>) : null}
+            <div className="mt-2 flex justify-between border-t border-slate-200 pt-2 font-semibold">
+              <span>{t("app.text0182")}</span>
+              <span>{formatCurrency(Number(devis.total), devis.currency)}</span>
+            </div>
+          </section>
+          {devis.notes || devis.terms ? (<section className="mt-5 rounded-lg border border-slate-200 p-4 text-sm">
+              {devis.terms ? (<>
+                  <p className="font-semibold">{t("app.text0184")}</p>
+                  <p className="mt-1 text-slate-600">{devis.terms}</p>
+                </>) : null}
+              {devis.notes ? (<>
+                  <p className="mt-3 font-semibold">{t("app.text0183")}</p>
+                  <p className="mt-1 text-slate-600">{devis.notes}</p>
+                </>) : null}
+            </section>) : null}
+        </div>)}
+      {devis ? (<div className="flex flex-col gap-2 border-t border-slate-200 p-5 sm:flex-row sm:justify-end">
+          {devis.status === 'DRAFT' && canUpdateDevis ? (<button className="h-9 rounded-md border border-slate-200 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50" onClick={() => onEdit(devis)} type="button">{t("app.text0232")}</button>) : null}
+          {devis.status === 'DRAFT' && canDeleteDevis ? (<button className="h-9 rounded-md border border-rose-200 px-3 text-sm font-medium text-rose-600 transition hover:bg-rose-50 disabled:opacity-60" disabled={isActionPending} onClick={() => onDelete(devis)} type="button">{t('common.delete')}</button>) : null}
+          {devis.status === 'DRAFT' ? (<button className="h-9 rounded-md border border-slate-200 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60" disabled={isActionPending} onClick={() => onSend(devis)} type="button">{t("app.text0202")}</button>) : null}
+          {devis.status === 'SENT' ? (<button className="h-9 rounded-md border border-emerald-200 px-3 text-sm font-medium text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-60" disabled={isActionPending} onClick={() => onApprove(devis)} type="button">{t('devis.approve')}</button>) : null}
+          {devis.status === 'SENT' || devis.status === 'APPROVED' ? (<button className="h-9 rounded-md border border-rose-200 px-3 text-sm font-medium text-rose-600 transition hover:bg-rose-50 disabled:opacity-60" disabled={isActionPending} onClick={() => onReject(devis)} type="button">{t('devis.reject')}</button>) : null}
+          {devis.status === 'APPROVED' ? (<button className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-white transition hover:bg-primary/90 disabled:opacity-60" disabled={isActionPending} onClick={() => onConvert(devis)} type="button">{t('devis.createInvoice')}</button>) : null}
+          {canSign ? (<button className="h-9 rounded-md border border-emerald-200 px-3 text-sm font-medium text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-60" disabled={isActionPending} onClick={() => onSign(devis)} type="button">{t('devis.sign')}</button>) : null}
+          {canCancelSignature ? (<button className="h-9 rounded-md border border-slate-200 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60" disabled={isActionPending} onClick={() => onCancelSignature(devis)} type="button">{t('devis.cancelSignature')}</button>) : null}
+          <button className="h-9 rounded-md border border-slate-200 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50" onClick={() => onDownload(devis)} type="button">{t('i18nDynamic.pdf')}</button>
+        </div>) : null}
+    </aside>);
+}
+function InvoiceDetailPanel({ invoice, isLoading, canSignInvoices, companySettings, isCancelSignaturePending, isEmailPending, isPaymentPending, isSignPending, isStatusPending, onClose, onCancelSignature, onDownload, onEmail, onEdit, onOpenDevis, onPaymentSubmit, onPrint, onPrepareReminder, onSign, onStatusChange, paymentAmount, paymentEntryDate, paymentMethod, paymentReference, setPaymentAmount, setPaymentEntryDate, setPaymentMethod, setPaymentReference, }: InvoiceDetailPanelProps) {
     const balanceDue = invoice ? Number(invoice.balanceDue) : 0;
     const canCollect = Boolean(invoice && balanceDue > 0 && invoice.status !== 'DRAFT' && invoice.status !== 'CANCELLED');
     const hasCompanySignatureAssets = Boolean(companySettings?.signatureUrl && companySettings?.stampUrl);
@@ -4831,6 +5657,9 @@ function InvoiceDetailPanel({ invoice, isLoading, canSignInvoices, companySettin
                 : 'bg-slate-100 text-slate-600 ring-slate-200'}`}>
                 {invoice.isSigned ? t('i18nDynamic.signed') : t("audit.text0117")}
               </span>
+              {invoice.sourceDevis ? (<button className="mt-3 block text-sm font-medium text-primary hover:underline" onClick={() => onOpenDevis(invoice.sourceDevis!.id)} type="button">
+                  {t('devis.sourceQuote')}: {invoice.sourceDevis.devisNumber}
+                </button>) : null}
               {invoice.isSigned ? (<div className="mt-3 rounded-md bg-emerald-50 p-3 text-sm text-emerald-800">
                   <p className="font-medium">{t("app.text0403")}</p>
                   <p className="mt-1">{t("app.text0404")}{invoice.signedBy?.name ?? t('auditFinal.userFallback')} ·{' '}
@@ -5102,6 +5931,17 @@ function calculateInvoiceTotals(items: InvoiceDraftItem[], _taxRate: number, dis
     const total = Math.max(0, subtotal + taxAmount - Number(discount));
     return { subtotal, taxAmount, total };
 }
+function calculateDevisItemTotal(item: DevisDraftItem, taxRate: number) {
+    const lineBase = Math.max(0, Number(item.quantity) * Number(item.unitPrice) - Number(item.discount));
+    const taxAmount = lineBase * (taxRate / 100);
+    return lineBase + taxAmount;
+}
+function calculateDevisTotals(items: DevisDraftItem[], taxRate: number, discount: number) {
+    const subtotal = items.reduce((sum, item) => sum + Math.max(0, Number(item.quantity) * Number(item.unitPrice) - Number(item.discount)), 0);
+    const taxAmount = subtotal * (taxRate / 100);
+    const total = Math.max(0, subtotal + taxAmount - discount);
+    return { subtotal, taxAmount, total };
+}
 function getAutomaticVatRate(customer?: Customer, settings?: CompanySettings) {
     const countryCode = normalizeCountryCode(customer?.countryCode ?? '');
     if (!settings?.vatEnabled)
@@ -5273,6 +6113,18 @@ function getApiErrorMessage(error: unknown, fallback: string) {
         return error.message;
     }
     return fallback;
+}
+function getLocalizedDevisErrorMessage(error: unknown, fallback: string, translate: (key: string) => string) {
+    const message = getApiErrorMessage(error, fallback);
+    const translations: Record<string, string> = {
+        'Only draft quotes can be edited': translate('devis.onlyDraftEditable'),
+        'Only draft quotes can be deleted': translate('devis.onlyDraftDeletable'),
+        'Only draft, approved or converted quotes can be signed': translate('devis.onlyAllowedStatusesSignable'),
+        'This quote is already signed': translate('devis.alreadySigned'),
+        'This quote is not signed': translate('devis.notSigned'),
+        'An approved quote already exists for this customer and catalog': translate('devis.approvedDuplicateCatalog'),
+    };
+    return translations[message] ?? message;
 }
 function normalizeRole(role: string | undefined) {
     const normalized = String(role ?? '').trim().toUpperCase();

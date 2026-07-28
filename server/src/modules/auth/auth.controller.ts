@@ -23,6 +23,16 @@ const getAccessCookieOptions = (rememberMe = true) => ({
   maxAge: 15 * 60 * 1000,
 });
 
+const getClearCookieOptions = (rememberMe = true) => {
+  const { maxAge: _maxAge, ...options } = getCookieOptions(rememberMe);
+  return options;
+};
+
+const getClearAccessCookieOptions = (rememberMe = true) => {
+  const { maxAge: _maxAge, ...options } = getAccessCookieOptions(rememberMe);
+  return options;
+};
+
 export class AuthController {
   /**
    * Register endpoint
@@ -107,8 +117,8 @@ export class AuthController {
    */
   async logout(_req: Request, res: Response, next: NextFunction) {
     try {
-      res.clearCookie('accessToken', getAccessCookieOptions());
-      res.clearCookie('refreshToken', getCookieOptions());
+      res.clearCookie('accessToken', getClearAccessCookieOptions());
+      res.clearCookie('refreshToken', getClearCookieOptions());
       ApiResponse.success(res, null, 'Logged out successfully');
     } catch (error) {
       next(error);

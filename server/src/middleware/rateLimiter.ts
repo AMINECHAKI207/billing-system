@@ -1,6 +1,6 @@
 import rateLimit from 'express-rate-limit';
 import { ApiError } from '@utils/ApiError';
-import { isDev } from '@config/env';
+import { isDev, isTest } from '@config/env';
 
 /**
  * Rate Limiters
@@ -16,6 +16,7 @@ import { isDev } from '@config/env';
 export const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: isDev ? 5000 : 100,
+  skip: () => isTest,
   standardHeaders: true,   // Return rate limit info in headers
   legacyHeaders: false,     // Disable the X-RateLimit-* headers (deprecated)
   handler: (_req, _res, next) => {
@@ -36,6 +37,7 @@ export const generalLimiter = rateLimit({
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: isDev ? 200 : 10,
+  skip: () => isTest,
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true, // Don't count successful logins

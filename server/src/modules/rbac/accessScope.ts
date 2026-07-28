@@ -22,6 +22,10 @@ export function invoiceAccessWhere(userId: string, scope: PermissionScope): Pris
   return { customer: customerAccessWhere(userId, scope) };
 }
 
+export function devisAccessWhere(userId: string, scope: PermissionScope): Prisma.DevisWhereInput {
+  return { customer: customerAccessWhere(userId, scope) };
+}
+
 export function paymentAccessWhere(userId: string, scope: PermissionScope): Prisma.PaymentWhereInput {
   return { invoice: { customer: customerAccessWhere(userId, scope) } };
 }

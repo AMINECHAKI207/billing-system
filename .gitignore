@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
 .npm
+.npm-cache/
 
 # Build outputs
 dist/
@@ -11,6 +12,9 @@ build/
 .env
 .env.local
 .env.*.local
+.env.e2e
+client/.env.e2e
+server/.env.e2e
 server/.env
 server/.env.local
 server/.env.*.local
@@ -19,6 +23,9 @@ server/.env.*.local
 server/uploads/*
 !server/uploads/.gitkeep
 output/
+.tmp/
+playwright-report/
+.playwright-browsers/
 
 # Logs
 logs/

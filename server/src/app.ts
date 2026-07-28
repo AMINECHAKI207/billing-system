@@ -12,6 +12,7 @@ import { generalLimiter } from '@middleware/rateLimiter';
 import authRouter from '@modules/auth/auth.routes';
 import customerRouter from '@modules/customer/customer.routes';
 import invoiceRouter from '@modules/invoice/invoice.routes';
+import devisRouter from '@modules/devis/devis.routes';
 import reminderRouter from '@modules/reminder/reminder.routes';
 import settingsRouter from '@modules/settings/settings.routes';
 import productRouter from '@modules/product/product.routes';
@@ -69,6 +70,7 @@ export function createApp(): Application {
   app.use('/api/auth', authRouter);
   app.use('/api/customers', customerRouter);
   app.use('/api/invoices', invoiceRouter);
+  app.use('/api/devis', devisRouter);
   app.use('/api/reminders', reminderRouter);
   app.use('/api/settings', settingsRouter);
   app.use('/api/products', productRouter);

@@ -25,6 +25,9 @@ type InvoiceWithPdfRelations = Invoice & {
     name: string;
     email: string;
   } | null;
+  sourceDevis?: {
+    devisNumber: string;
+  } | null;
 };
 
 export function renderInvoicePdf(
@@ -193,12 +196,15 @@ function drawParties(
   ]);
 
   const metaTop = top + height + 10;
-  const metaHeight = 46;
+  const metaHeight = invoice.sourceDevis ? 78 : 46;
   drawCard(doc, left, metaTop, pageWidth(doc), metaHeight, '#f8fafc', '#e2e8f0');
   drawMetaItem(doc, left + 18, metaTop + 9, 'Emission', formatPdfDate(invoice.issueDate));
   drawMetaItem(doc, left + 154, metaTop + 9, 'Echeance', formatPdfDate(invoice.dueDate));
   drawMetaItem(doc, left + 290, metaTop + 9, 'Devise', invoice.currency);
   drawMetaItem(doc, left + 408, metaTop + 9, 'Solde', formatPdfCurrency(Number(invoice.balanceDue), invoice.currency));
+  if (invoice.sourceDevis) {
+    drawLinkedReference(doc, left + 18, metaTop + 48, pageWidth(doc) - 36, 'Devis source', invoice.sourceDevis.devisNumber);
+  }
 
   doc.y = metaTop + metaHeight + 16;
 }
@@ -367,6 +373,14 @@ function drawMetaItem(doc: PDFKit.PDFDocument, x: number, y: number, label: stri
   doc.text(label.toUpperCase(), x, y, { width: 112 });
   doc.font('Helvetica-Bold').fontSize(10).fillColor('#0f172a');
   doc.text(value, x, y + 16, { width: 112, ellipsis: true });
+}
+
+function drawLinkedReference(doc: PDFKit.PDFDocument, x: number, y: number, width: number, label: string, value: string) {
+  doc.moveTo(x, y - 9).lineTo(x + width, y - 9).strokeColor('#e2e8f0').lineWidth(0.6).stroke();
+  doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#64748b');
+  doc.text(label.toUpperCase(), x, y, { width: 145, lineBreak: false });
+  doc.font('Helvetica-Bold').fontSize(10).fillColor('#0f172a');
+  doc.text(value, x + 150, y - 1, { width: width - 150, ellipsis: true });
 }
 
 function drawTableHeader(

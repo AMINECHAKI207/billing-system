@@ -87,6 +87,17 @@ export class InvoiceRepository {
     return { data, total };
   }
 
+  async findAllForExport(params: {
+    where: Prisma.InvoiceWhereInput;
+    orderBy: Prisma.InvoiceOrderByWithRelationInput;
+  }) {
+    return prisma.invoice.findMany({
+      where: params.where,
+      orderBy: params.orderBy,
+      include: this.defaultInclude(),
+    });
+  }
+
   async addPaymentAndRefreshInvoice(params: {
     invoiceId: string;
     recordedById: string;
@@ -450,6 +461,9 @@ export class InvoiceRepository {
       },
       items: {
         orderBy: { sortOrder: 'asc' as const },
+      },
+      sourceDevis: {
+        select: { id: true, devisNumber: true, status: true },
       },
       payments: {
         orderBy: { paymentDate: 'desc' as const },

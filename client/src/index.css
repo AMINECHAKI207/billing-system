@@ -270,6 +270,7 @@
       radial-gradient(circle at top left, hsl(var(--primary) / 0.08), transparent 32rem),
       linear-gradient(180deg, hsl(var(--background)), hsl(var(--surface-soft)));
     color: hsl(var(--foreground));
+    overflow-x: hidden;
   }
 
   .app-sidebar {

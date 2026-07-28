@@ -3,6 +3,9 @@ import dotenv from 'dotenv';
 import path from 'path';
 
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+if (process.env.ENV_FILE) {
+  dotenv.config({ path: path.resolve(__dirname, '../../', process.env.ENV_FILE), override: true });
+}
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),

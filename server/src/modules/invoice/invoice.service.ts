@@ -8,6 +8,7 @@ import { rbacService } from '@modules/rbac/rbac.service';
 import { customerAccessWhere, invoiceAccessWhere } from '@modules/rbac/accessScope';
 import { invoiceRepository } from './invoice.repository';
 import { renderInvoicePdfBuffer } from './invoice.pdf';
+import { renderInvoicesExcelBuffer } from './invoice.excel';
 import { getCountryName, isValidCountryCode, normalizeCountryCode } from '@utils/countries';
 import {
   AddPaymentInput,
@@ -83,27 +84,7 @@ export class InvoiceService {
       'createdAt'
     );
 
-    const where: Prisma.InvoiceWhereInput = {
-      AND: [invoiceAccessWhere(userId, scope)],
-      ...(query.status && { status: query.status }),
-      ...(query.customerId && { customerId: query.customerId }),
-      ...((query.dateFrom || query.dateTo) && {
-        issueDate: {
-          ...(query.dateFrom && { gte: new Date(query.dateFrom) }),
-          ...(query.dateTo && { lte: new Date(query.dateTo) }),
-        },
-      }),
-      ...(query.search && {
-        OR: [
-          { invoiceNumber: { contains: query.search, mode: 'insensitive' } },
-          { customer: { name: { contains: query.search, mode: 'insensitive' } } },
-          { customer: { email: { contains: query.search, mode: 'insensitive' } } },
-          { customer: { phone: { contains: query.search, mode: 'insensitive' } } },
-          { customer: { company: { contains: query.search, mode: 'insensitive' } } },
-          { customer: { taxNumber: { contains: query.search, mode: 'insensitive' } } },
-        ],
-      }),
-    };
+    const where = this.buildInvoiceWhere(userId, scope, query);
 
     const { data, total } = await invoiceRepository.findAll({
       skip,
@@ -121,6 +102,22 @@ export class InvoiceService {
         totalPages: Math.ceil(total / limit),
       },
     };
+  }
+
+  async exportInvoicesExcel(userId: string, scope: PermissionScope, query: InvoiceQueryInput) {
+    await invoiceRepository.markExpiredInvoicesOverdue();
+
+    const { sortBy, sortOrder } = parseSort(
+      { sortBy: query.sortBy, sortOrder: query.sortOrder },
+      ['createdAt', 'issueDate', 'dueDate', 'total', 'balanceDue', 'invoiceNumber'],
+      'createdAt'
+    );
+    const invoices = await invoiceRepository.findAllForExport({
+      where: this.buildInvoiceWhere(userId, scope, query),
+      orderBy: { [sortBy]: sortOrder },
+    });
+
+    return renderInvoicesExcelBuffer(invoices);
   }
 
   async getInvoiceById(id: string, userId: string, scope: PermissionScope) {
@@ -392,6 +389,30 @@ export class InvoiceService {
         subject,
       },
       delivery,
+    };
+  }
+
+  private buildInvoiceWhere(userId: string, scope: PermissionScope, query: InvoiceQueryInput): Prisma.InvoiceWhereInput {
+    return {
+      AND: [invoiceAccessWhere(userId, scope)],
+      ...(query.status && { status: query.status }),
+      ...(query.customerId && { customerId: query.customerId }),
+      ...((query.dateFrom || query.dateTo) && {
+        issueDate: {
+          ...(query.dateFrom && { gte: new Date(query.dateFrom) }),
+          ...(query.dateTo && { lte: new Date(query.dateTo) }),
+        },
+      }),
+      ...(query.search && {
+        OR: [
+          { invoiceNumber: { contains: query.search, mode: 'insensitive' } },
+          { customer: { name: { contains: query.search, mode: 'insensitive' } } },
+          { customer: { email: { contains: query.search, mode: 'insensitive' } } },
+          { customer: { phone: { contains: query.search, mode: 'insensitive' } } },
+          { customer: { company: { contains: query.search, mode: 'insensitive' } } },
+          { customer: { taxNumber: { contains: query.search, mode: 'insensitive' } } },
+        ],
+      }),
     };
   }
 

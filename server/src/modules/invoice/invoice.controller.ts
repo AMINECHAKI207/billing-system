@@ -48,6 +48,25 @@ export class InvoiceController {
     }
   }
 
+  async exportExcel(req: Request, res: Response, next: NextFunction) {
+    try {
+      const query = invoiceQuerySchema.parse(req).query;
+      const buffer = await invoiceService.exportInvoicesExcel(
+        req.user!.id,
+        permissionScope(req.user!.permissionScopes, 'invoices.view'),
+        query
+      );
+      const fileName = `invoices-${new Date().toISOString().slice(0, 10)}.xlsx`;
+
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      res.setHeader('Content-Length', String(buffer.length));
+      res.send(buffer);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async getById(req: Request, res: Response, next: NextFunction) {
     try {
       const invoice = await invoiceService.getInvoiceById(req.params.id!, req.user!.id, permissionScope(req.user!.permissionScopes, 'invoices.view'));

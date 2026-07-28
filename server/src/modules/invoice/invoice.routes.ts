@@ -8,6 +8,7 @@ const router = Router();
 router.use(authenticate);
 
 router.get('/dashboard', requirePermission('invoices.view'), invoiceController.getDashboard);
+router.get('/export/excel', requirePermission('invoices.view'), invoiceController.exportExcel);
 
 router.route('/')
   .get(requirePermission('invoices.view'), invoiceController.getAll)

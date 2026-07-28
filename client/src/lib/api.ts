@@ -9,7 +9,10 @@ import type {
   DashboardStats,
   EmailDeliveryStatus,
   EmailTestResult,
+  Devis,
+  DevisFilters,
   CreateInvoiceForm,
+  CreateDevisForm,
   CreateCustomerForm,
   CreatePaymentForm,
   CreateProductForm,
@@ -399,6 +402,23 @@ export async function getInvoices(filters: InvoiceFilters = {}): Promise<Invoice
   return response.data.data;
 }
 
+export async function downloadInvoicesExcel(filters: InvoiceFilters = {}): Promise<void> {
+  const response = await api.get<Blob>('/invoices/export/excel', {
+    params: filters,
+    responseType: 'blob',
+  });
+  const url = URL.createObjectURL(response.data);
+  const link = document.createElement('a');
+  const today = new Date().toISOString().slice(0, 10);
+
+  link.href = url;
+  link.download = `invoices-${today}.xlsx`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export async function getInvoiceDashboard(filters: DashboardFilters = {}): Promise<DashboardStats> {
   const response = await api.get<ApiResponse<{ dashboard: DashboardStats }>>('/invoices/dashboard', {
     params: filters,
@@ -475,6 +495,97 @@ export async function printInvoicePdf(invoiceId: string): Promise<void> {
   if (printWindow) {
     printWindow.addEventListener('load', () => printWindow.print(), { once: true });
   }
+}
+
+export type DevisListResponse = {
+  data: Devis[];
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+};
+
+export async function getDevis(filters: DevisFilters = {}): Promise<DevisListResponse> {
+  const response = await api.get<ApiResponse<DevisListResponse>>('/devis', {
+    params: filters,
+  });
+
+  return response.data.data;
+}
+
+export async function getDevisById(devisId: string): Promise<Devis> {
+  const response = await api.get<ApiResponse<{ devis: Devis }>>(`/devis/${devisId}`);
+  return response.data.data.devis;
+}
+
+export async function createDevis(input: CreateDevisForm): Promise<Devis> {
+  const response = await api.post<ApiResponse<{ devis: Devis }>>('/devis', input);
+  return response.data.data.devis;
+}
+
+export async function updateDevis(devisId: string, input: CreateDevisForm): Promise<Devis> {
+  const response = await api.patch<ApiResponse<{ devis: Devis }>>(`/devis/${devisId}`, input);
+  return response.data.data.devis;
+}
+
+export async function deleteDevis(devisId: string): Promise<void> {
+  await api.delete(`/devis/${devisId}`);
+}
+
+export async function deleteDraftDevis(): Promise<{ deletedCount: number }> {
+  const response = await api.delete<ApiResponse<{ deletedCount: number }>>('/devis/drafts');
+  return response.data.data;
+}
+
+export async function sendDevis(devisId: string): Promise<Devis> {
+  const response = await api.post<ApiResponse<{ devis: Devis }>>(`/devis/${devisId}/send`);
+  return response.data.data.devis;
+}
+
+export async function approveDevis(devisId: string): Promise<Devis> {
+  const response = await api.post<ApiResponse<{ devis: Devis }>>(`/devis/${devisId}/approve`);
+  return response.data.data.devis;
+}
+
+export async function rejectDevis(devisId: string): Promise<Devis> {
+  const response = await api.post<ApiResponse<{ devis: Devis }>>(`/devis/${devisId}/reject`);
+  return response.data.data.devis;
+}
+
+export async function convertDevisToInvoice(devisId: string): Promise<{ devis: Devis; invoice: Invoice }> {
+  const response = await api.post<ApiResponse<{ devis: Devis; invoice: Invoice }>>(`/devis/${devisId}/convert-to-invoice`);
+  return response.data.data;
+}
+
+export async function signDevis(devisId: string): Promise<Devis> {
+  const response = await api.post<ApiResponse<{ devis: Devis }>>(`/devis/${devisId}/sign`);
+  return response.data.data.devis;
+}
+
+export async function cancelDevisSignature(devisId: string): Promise<Devis> {
+  const response = await api.delete<ApiResponse<{ devis: Devis }>>(`/devis/${devisId}/sign`);
+  return response.data.data.devis;
+}
+
+export function getDevisPdfUrl(devisId: string) {
+  return `/devis/${devisId}/pdf`;
+}
+
+export async function downloadDevisPdf(devisId: string, devisNumber: string): Promise<void> {
+  const response = await api.get<Blob>(getDevisPdfUrl(devisId), {
+    responseType: 'blob',
+  });
+  const url = URL.createObjectURL(response.data);
+  const link = document.createElement('a');
+
+  link.href = url;
+  link.download = `${devisNumber}.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 export async function sendInvoiceEmail(

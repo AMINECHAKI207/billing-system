@@ -18,6 +18,8 @@ export type InvoiceStatus =
   | 'OVERDUE'
   | 'CANCELLED';
 
+export type DevisStatus = 'DRAFT' | 'SENT' | 'APPROVED' | 'REJECTED' | 'EXPIRED' | 'CONVERTED';
+
 export type PaymentMethod =
   | 'CASH'
   | 'BANK_TRANSFER'
@@ -165,6 +167,19 @@ export interface InvoiceItem {
   sortOrder: number;
 }
 
+export interface DevisItem {
+  id: string;
+  devisId: string;
+  description: string;
+  unit?: string;
+  quantity: number;
+  unitPrice: number;
+  discount: number;
+  taxRate: number;
+  lineTotal: number;
+  sortOrder: number;
+}
+
 export interface Invoice {
   id: string;
   customerId: string;
@@ -196,6 +211,7 @@ export interface Invoice {
   signedById?: string;
   signatureUrl?: string;
   stampUrl?: string;
+  sourceDevisId?: string;
   createdAt: string;
   updatedAt: string;
   customer?: Customer;
@@ -205,6 +221,48 @@ export interface Invoice {
   payments?: Payment[];
   reminders?: Reminder[];
   emailLogs?: InvoiceEmailLog[];
+  sourceDevis?: Pick<Devis, 'id' | 'devisNumber' | 'status'>;
+}
+
+export interface Devis {
+  id: string;
+  devisNumber: string;
+  companyId: number;
+  customerId: string;
+  createdById: string;
+  status: DevisStatus;
+  issueDate: string;
+  validUntil: string;
+  subtotal: number;
+  taxRate: number;
+  taxAmount: number;
+  customerCountry: string;
+  customerCountryCode: string;
+  vatOverridden: boolean;
+  vatOverrideReason?: string;
+  vatOverriddenAt?: string;
+  vatOverriddenById?: string;
+  discount: number;
+  total: number;
+  notes?: string;
+  terms?: string;
+  currency: string;
+  sentAt?: string;
+  approvedAt?: string;
+  rejectedAt?: string;
+  convertedAt?: string;
+  isSigned: boolean;
+  signedAt?: string;
+  signedById?: string;
+  signatureUrl?: string;
+  stampUrl?: string;
+  createdAt: string;
+  updatedAt: string;
+  customer?: Customer;
+  createdBy?: User;
+  signedBy?: User;
+  items?: DevisItem[];
+  generatedInvoice?: Pick<Invoice, 'id' | 'invoiceNumber' | 'status' | 'total' | 'currency'>;
 }
 
 export interface InvoiceEmailLog {
@@ -491,6 +549,10 @@ export interface InvoiceItemForm {
   taxRate: number;
 }
 
+export interface DevisItemForm extends InvoiceItemForm {
+  discount: number;
+}
+
 export interface CreateInvoiceForm {
   customerId: string;
   status?: InvoiceStatus;
@@ -503,6 +565,20 @@ export interface CreateInvoiceForm {
   terms?: string;
   currency: string;
   items: InvoiceItemForm[];
+}
+
+export interface CreateDevisForm {
+  customerId: string;
+  status?: DevisStatus;
+  issueDate: string;
+  validUntil: string;
+  taxRate: number;
+  vatOverrideReason?: string;
+  discount: number;
+  notes?: string;
+  terms?: string;
+  currency: string;
+  items: DevisItemForm[];
 }
 
 export interface CreateCustomerForm {
@@ -550,6 +626,18 @@ export interface InvoiceFilters {
   limit?: number;
   search?: string;
   status?: InvoiceStatus;
+  customerId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}
+
+export interface DevisFilters {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: DevisStatus;
   customerId?: string;
   dateFrom?: string;
   dateTo?: string;

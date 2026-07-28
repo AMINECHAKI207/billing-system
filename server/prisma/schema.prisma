@@ -26,6 +26,15 @@ enum InvoiceStatus {
   CANCELLED
 }
 
+enum DevisStatus {
+  DRAFT
+  SENT
+  APPROVED
+  REJECTED
+  EXPIRED
+  CONVERTED
+}
+
 enum PaymentMethod {
   CASH
   BANK_TRANSFER
@@ -92,8 +101,11 @@ model User {
   // Relations
   customers      Customer[]
   invoices       Invoice[] @relation("InvoiceCreatedBy")
+  devis          Devis[] @relation("DevisCreatedBy")
   signedInvoices Invoice[] @relation("InvoiceSignedBy")
+  signedDevis    Devis[] @relation("DevisSignedBy")
   vatOverrides   Invoice[] @relation("InvoiceVatOverriddenBy")
+  devisVatOverrides Devis[] @relation("DevisVatOverriddenBy")
   payments       Payment[]
   reminders      Reminder[]
   invoiceEmailLogs InvoiceEmailLog[]
@@ -184,6 +196,7 @@ model Customer {
   // Relations
   createdBy   User      @relation(fields: [createdById], references: [id], onDelete: Restrict)
   invoices    Invoice[]
+  devis       Devis[]
   assignedUsers UserClientAssignment[]
   recurringPlans RecurringPlan[]
 
@@ -229,6 +242,7 @@ model Invoice {
   signedById    String?       @map("signed_by") @db.Uuid
   signatureUrl  String?       @map("signature_url") @db.VarChar(500)
   stampUrl      String?       @map("stamp_url") @db.VarChar(500)
+  sourceDevisId String?       @unique @map("source_devis_id") @db.Uuid
   createdAt     DateTime      @default(now()) @map("created_at")
   updatedAt     DateTime      @updatedAt @map("updated_at")
 
@@ -244,6 +258,7 @@ model Invoice {
   recurringExecutions RecurringExecution[]
   recurringPlanId String?       @map("recurring_plan_id") @db.Uuid
   recurringPlan   RecurringPlan? @relation(fields: [recurringPlanId], references: [id], onDelete: SetNull)
+  sourceDevis      Devis?        @relation("DevisToInvoice", fields: [sourceDevisId], references: [id], onDelete: SetNull)
 
   @@map("invoices")
   @@index([invoiceNumber])
@@ -253,6 +268,79 @@ model Invoice {
   @@index([signedById])
   @@index([vatOverriddenById])
   @@index([recurringPlanId])
+  @@index([sourceDevisId])
+}
+
+model Devis {
+  id            String      @id @default(uuid()) @db.Uuid
+  devisNumber   String      @unique @map("devis_number") @db.VarChar(50)
+  companyId     Int         @default(1) @map("company_id")
+  customerId    String      @map("customer_id") @db.Uuid
+  createdById   String      @map("created_by") @db.Uuid
+  status        DevisStatus @default(DRAFT)
+  issueDate     DateTime    @map("issue_date") @db.Date
+  validUntil    DateTime    @map("valid_until") @db.Date
+  subtotal      Decimal     @db.Decimal(12, 2)
+  taxRate       Decimal     @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  taxAmount     Decimal     @default(0) @map("tax_amount") @db.Decimal(12, 2)
+  customerCountry     String  @default("Morocco") @map("customer_country") @db.VarChar(100)
+  customerCountryCode String  @default("MA") @map("customer_country_code") @db.VarChar(2)
+  vatOverridden       Boolean @default(false) @map("vat_overridden")
+  vatOverrideReason   String? @map("vat_override_reason") @db.VarChar(500)
+  vatOverriddenAt     DateTime? @map("vat_overridden_at")
+  vatOverriddenById   String? @map("vat_overridden_by") @db.Uuid
+  discount      Decimal     @default(0) @db.Decimal(12, 2)
+  total         Decimal     @db.Decimal(12, 2)
+  notes         String?     @db.Text
+  terms         String?     @db.Text
+  currency      String      @default("MAD") @db.VarChar(10)
+  sentAt        DateTime?   @map("sent_at")
+  approvedAt    DateTime?   @map("approved_at")
+  rejectedAt    DateTime?   @map("rejected_at")
+  convertedAt   DateTime?   @map("converted_at")
+  isSigned      Boolean     @default(false) @map("is_signed")
+  signedAt      DateTime?   @map("signed_at")
+  signedById    String?     @map("signed_by") @db.Uuid
+  signatureUrl  String?     @map("signature_url") @db.VarChar(500)
+  stampUrl      String?     @map("stamp_url") @db.VarChar(500)
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  company        CompanySettings @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  customer       Customer        @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  createdBy      User            @relation("DevisCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  signedBy       User?           @relation("DevisSignedBy", fields: [signedById], references: [id], onDelete: SetNull)
+  vatOverriddenBy User?          @relation("DevisVatOverriddenBy", fields: [vatOverriddenById], references: [id], onDelete: SetNull)
+  items          DevisItem[]
+  generatedInvoice Invoice?      @relation("DevisToInvoice")
+
+  @@map("devis")
+  @@index([devisNumber])
+  @@index([status])
+  @@index([issueDate])
+  @@index([validUntil])
+  @@index([customerId])
+  @@index([createdById])
+  @@index([signedById])
+  @@index([vatOverriddenById])
+}
+
+model DevisItem {
+  id          String   @id @default(uuid()) @db.Uuid
+  devisId     String   @map("devis_id") @db.Uuid
+  description String   @db.Text
+  unit        String?  @db.VarChar(50)
+  quantity    Decimal  @db.Decimal(12, 2)
+  unitPrice   Decimal  @map("unit_price") @db.Decimal(12, 2)
+  discount    Decimal  @default(0) @db.Decimal(12, 2)
+  taxRate     Decimal  @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  lineTotal   Decimal  @map("line_total") @db.Decimal(12, 2)
+  sortOrder   Int      @default(0) @map("sort_order")
+
+  devis       Devis    @relation(fields: [devisId], references: [id], onDelete: Cascade)
+
+  @@map("devis_items")
+  @@index([devisId])
 }
 
 model InvoiceEmailLog {
@@ -286,6 +374,14 @@ model InvoiceSequence {
   @@map("invoice_sequences")
 }
 
+model DevisSequence {
+  year       Int      @id
+  nextNumber Int      @default(1) @map("next_number")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@map("devis_sequences")
+}
+
 model CompanySettings {
   id              Int      @id @default(1)
   name            String   @db.VarChar(255)
@@ -303,6 +399,8 @@ model CompanySettings {
   paymentTerms    String?  @map("payment_terms") @db.Text
   bankDetails     String?  @map("bank_details") @db.Text
   updatedAt       DateTime @updatedAt @map("updated_at")
+
+  devis           Devis[]
 
   @@map("company_settings")
 }

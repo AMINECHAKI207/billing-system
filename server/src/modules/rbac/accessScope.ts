@@ -29,3 +29,15 @@ export function devisAccessWhere(userId: string, scope: PermissionScope): Prisma
 export function paymentAccessWhere(userId: string, scope: PermissionScope): Prisma.PaymentWhereInput {
   return { invoice: { customer: customerAccessWhere(userId, scope) } };
 }
+
+export function expenseNoteAccessWhere(userId: string, scope: PermissionScope): Prisma.ExpenseNoteWhereInput {
+  switch (scope) {
+    case PermissionScope.ALL:
+      return {};
+    case PermissionScope.OWN:
+    case PermissionScope.SELECTED:
+      return { createdById: userId };
+    default:
+      throw ApiError.forbidden('Unsupported permission scope');
+  }
+}

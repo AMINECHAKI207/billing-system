@@ -38,6 +38,8 @@ const envSchema = z.object({
   AI_BACKGROUND_REMOVAL_MODEL: z.string().default('ZhengPeng7/BiRefNet'),
   AI_BACKGROUND_REMOVAL_IMAGE_SIZE: z.string().default('768').transform(Number),
   AI_BACKGROUND_REMOVAL_TIMEOUT_MS: z.string().default('180000').transform(Number),
+  OPENAI_API_KEY: z.string().optional(),
+  OPENAI_MODEL: z.string().default('gpt-5-nano'),
 
   DEFAULT_CURRENCY: z.string().default('MAD'),
   COMPANY_NAME: z.string().default('My Company'),

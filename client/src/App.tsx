@@ -1,5 +1,6 @@
 import { AlertTriangle, Bell, CalendarClock, CheckCircle2, Crop, Download, Eraser, Eye, EyeOff, FilePlus2, Loader2, Lock, LogIn, LogOut, Mail, Menu, Moon, Move, PanelLeftClose, PanelLeftOpen, PenLine, Plus, Printer, Redo2, RefreshCcw, RotateCw, Trash2, ReceiptText, Search, Settings, ShieldCheck, Stamp, Sun, Undo2, Unlock, Upload, Users, WalletCards, ZoomIn, ZoomOut, } from 'lucide-react';
 import { LanguageSwitcher } from './components/LanguageSwitcher';
+import { ExpenseNotesView } from './components/expenses/ExpenseNotesView';
 import i18n from './i18n';
 
 const t = i18n.t.bind(i18n);
@@ -37,7 +38,7 @@ type CompanyAssetDraft = {
     fileName: string;
     previewUrl: string;
 };
-type ViewKey = 'dashboard' | 'clients' | 'invoices' | 'devis' | 'payments' | 'reports' | 'reminders' | 'products' | 'users' | 'rbac' | 'settings';
+type ViewKey = 'dashboard' | 'clients' | 'invoices' | 'devis' | 'payments' | 'reports' | 'reminders' | 'expenses' | 'products' | 'users' | 'rbac' | 'settings';
 type InvoiceSortField = 'createdAt' | 'issueDate' | 'dueDate' | 'total' | 'balanceDue' | 'invoiceNumber';
 type DevisSortField = 'createdAt' | 'issueDate' | 'validUntil' | 'total' | 'devisNumber';
 type CustomerSortField = 'createdAt' | 'name' | 'company' | 'email';
@@ -134,6 +135,7 @@ const navItems: Array<{
     { key: 'payments', label: "app.text0009", icon: CheckCircle2 },
     { key: 'reports', label: "app.text0010", icon: AlertTriangle },
     { key: 'reminders', label: "app.text0011", icon: Bell },
+    { key: 'expenses', label: "expenses.nav", icon: ReceiptText },
     { key: 'products', label: "app.text0012", icon: ReceiptText },
     { key: 'users', label: "app.text0013", icon: Users },
     { key: 'rbac', label: "app.text0014", icon: ShieldCheck },
@@ -171,6 +173,10 @@ const viewMeta: Record<ViewKey, {
         title: "app.text0011",
         description: "app.text0022",
     },
+    expenses: {
+        title: "expenses.title",
+        description: "expenses.description",
+    },
     products: {
         title: "app.text0012",
         description: "app.text0023",
@@ -196,6 +202,7 @@ const viewPaths: Record<ViewKey, string> = {
     payments: '/payments',
     reports: '/reports',
     reminders: '/reminders',
+    expenses: '/expense-notes',
     products: '/catalogue',
     users: '/users',
     rbac: '/rbac',
@@ -1373,6 +1380,8 @@ function App() {
             return hasPermission('payments.view');
         if (item.key === 'reports')
             return hasPermission('reports.view');
+        if (item.key === 'expenses')
+            return hasPermission('expense_notes.view');
         if (item.key === 'products')
             return hasPermission('products.view');
         if (item.key === 'reminders')
@@ -1494,6 +1503,7 @@ function App() {
             payments: 'payments.view',
             reports: 'reports.view',
             reminders: 'reminders.view',
+            expenses: 'expense_notes.view',
             products: 'products.view',
             users: 'users.view',
             settings: 'settings.view',
@@ -2747,10 +2757,10 @@ function App() {
         }} onPasswordChange={setPassword} password={password} user={currentUserQuery.data}/>
                 </div>
               </div>
-              <button className="primary-action inline-flex h-9 shrink-0 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-white shadow-sm transition hover:bg-primary/90" onClick={activeView === 'devis' ? handleOpenDevisForm : handleOpenInvoiceForm} type="button">
+              {activeView !== 'expenses' ? (<button className="primary-action inline-flex h-9 shrink-0 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-white shadow-sm transition hover:bg-primary/90" onClick={activeView === 'devis' ? handleOpenDevisForm : handleOpenInvoiceForm} type="button">
                 <FilePlus2 className="h-4 w-4"/>
                 <span className="hidden sm:inline">{activeView === 'devis' ? t('devis.create') : t("app.text0136")}</span>
-              </button>
+              </button>) : null}
           </div>
         </header>
 
@@ -4037,6 +4047,8 @@ function App() {
                   </div>
                 </div>) : null}
             </section>) : null}
+
+          {activeView === 'expenses' ? (<ExpenseNotesView getApiErrorMessage={getApiErrorMessage} hasPermission={hasPermission}/>) : null}
 
           {activeView === 'products' ? (<section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
               <div className="rounded-lg border border-slate-200 bg-white shadow-sm">

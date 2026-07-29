@@ -916,5 +916,284 @@
     "alreadySigned": "This quote is already signed.",
     "notSigned": "This quote is not signed.",
     "approvedDuplicateCatalog": "An approved quote already exists for this client and catalog."
+  },
+  "expenses": {
+    "nav": "Expenses",
+    "title": "Expense Notes",
+    "description": "Manage receipts, AI extraction and reimbursable expenses.",
+    "subtitle": "{{count}} expense note(s) found.",
+    "kpi": {
+      "pending": "Pending",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "paid": "Paid",
+      "total": "Total"
+    },
+    "filters": {
+      "search": "Search merchant, receipt or comment",
+      "allCategories": "All categories",
+      "allTypes": "All types",
+      "allSources": "All sources",
+      "allStatuses": "All statuses",
+      "allEmployees": "All employees",
+      "amountMin": "Min amount",
+      "amountMax": "Max amount",
+      "allCurrencies": "All currencies",
+      "receipt": "Receipt",
+      "warnings": "AI warnings",
+      "hasReceipt": "Has receipt",
+      "noReceipt": "No receipt",
+      "hasWarnings": "Has warnings",
+      "noWarnings": "No warnings",
+      "aiConfidenceMin": "Min. AI confidence"
+    },
+    "fields": {
+      "date": "Date",
+      "merchant": "Merchant",
+      "category": "Category",
+      "expenseType": "Expense type",
+      "amountTTC": "Amount incl. tax",
+      "amountHT": "Amount excl. tax",
+      "vatAmount": "VAT amount",
+      "vatRate": "VAT rate",
+      "receiptNumber": "Receipt number",
+      "receipt": "Receipt",
+      "currency": "Currency",
+      "comment": "Comment",
+      "source": "Source",
+      "actions": "Actions",
+      "employee": "Employee",
+      "status": "Status",
+      "activity": "Activity"
+    },
+    "source": {
+      "manual": "Manual",
+      "ai": "AI"
+    },
+    "activity": {
+      "tooltip": "{{count}} activity event(s) in the history. Open activity details."
+    },
+    "form": {
+      "createTitle": "Create expense note",
+      "editTitle": "Edit expense note",
+      "description": "Review receipt data before saving the expense."
+    },
+    "drawer": {
+      "sections": {
+        "extracted": "Extracted data",
+        "review": "Review and submit",
+        "details": "Expense details",
+        "amounts": "Amounts and VAT",
+        "verification": "Verification"
+      },
+      "steps": {
+        "receipt": "Receipt",
+        "analysis": "AI Analysis",
+        "review": "Review",
+        "submit": "Submit"
+      }
+    },
+    "ai": {
+      "upload": "Upload receipt for AI analysis",
+      "hint": "PDF, PNG, JPG or JPEG up to 10 MB",
+      "dragHint": "Drop the receipt here or click to browse",
+      "review": "AI review",
+      "processing": "Analyzing receipt",
+      "status": "AI status",
+      "confidence": "AI confidence",
+      "processingStatus": "Processing status",
+      "extractedFields": "Extracted fields"
+    },
+    "actions": {
+      "create": "Create",
+      "new": "New Expense Note",
+      "update": "Update",
+      "delete": "Delete",
+      "cancel": "Cancel",
+      "add": "Add",
+      "previous": "Previous",
+      "next": "Next",
+      "saveDraft": "Save draft",
+      "submit": "Submit",
+      "analyzeSubmit": "Analyze and submit",
+      "approve": "Approve",
+      "reject": "Reject",
+      "requestChanges": "Request changes",
+      "markPaid": "Mark paid",
+      "confirm": "Confirm",
+      "downloadReceipt": "Download receipt",
+      "review": "Review",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "replaceReceipt": "Replace receipt",
+      "analyzeAgain": "Analyze again",
+      "removeReceipt": "Remove",
+      "import": "Upload",
+      "newShort": "New",
+      "filters": "Filters",
+      "previewPdf": "Preview PDF",
+      "downloadPdf": "Download PDF",
+      "printPdf": "Print",
+      "sendEmail": "Send by email",
+      "emailHistory": "Email history",
+      "exportExcel": "Excel",
+      "exportPdf": "PDF",
+      "exportZip": "ZIP"
+    },
+    "messages": {
+      "created": "Expense note created successfully.",
+      "updated": "Expense note updated successfully.",
+      "deleted": "Expense note deleted successfully.",
+      "saveError": "Unable to save expense note.",
+      "deleteError": "Unable to delete expense note.",
+      "analyzed": "Receipt analyzed. Please review before saving.",
+      "manualReview": "AI analysis requires manual review.",
+      "analyzeError": "Unable to analyze receipt.",
+      "categoryCreated": "Expense category created.",
+      "categoryError": "Unable to save expense category.",
+      "typeCreated": "Expense type created.",
+      "typeError": "Unable to save expense type.",
+      "submitted": "Expense note submitted for admin review.",
+      "submitError": "Unable to submit expense note.",
+      "approved": "Expense note approved.",
+      "approveError": "Unable to approve expense note.",
+      "rejected": "Expense note rejected.",
+      "rejectError": "Unable to reject expense note.",
+      "changesRequested": "Changes requested from employee.",
+      "changesError": "Unable to request changes.",
+      "paid": "Expense note marked as paid.",
+      "paidError": "Unable to mark expense note as paid.",
+      "pdfPreviewed": "PDF preview opened.",
+      "pdfDownloaded": "PDF downloaded.",
+      "pdfPrinted": "PDF ready to print.",
+      "pdfError": "Unable to generate the PDF.",
+      "emailSent": "Email sent.",
+      "emailError": "Unable to send the email.",
+      "exported": "Export generated.",
+      "exportError": "Unable to generate the export."
+    },
+    "confirm": {
+      "deleteTitle": "Delete expense note?",
+      "deleteDescription": "This action cannot be undone."
+    },
+    "empty": {
+      "title": "No expense notes yet",
+      "notes": "No expense notes found.",
+      "merchant": "No merchant",
+      "preview": "No preview",
+      "noColumnItems": "No notes",
+      "noAnalytics": "No analytics data."
+    },
+    "pagination": {
+      "page": "Page {{page}} of {{total}}",
+      "of": "of"
+    },
+    "manage": {
+      "title": "Categories and types",
+      "categoryName": "New category",
+      "typeName": "New type"
+    },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive",
+      "workflow": {
+        "DRAFT": "Draft",
+        "PROCESSING": "Processing",
+        "NEEDS_REVIEW": "Needs review",
+        "SUBMITTED": "Submitted",
+        "CHANGES_REQUESTED": "Changes requested",
+        "APPROVED": "Approved",
+        "REJECTED": "Rejected",
+        "PAID": "Paid"
+      }
+    },
+    "review": {
+      "title": "Admin review",
+      "receiptPreview": "Receipt preview",
+      "rejectionReason": "Rejection reason",
+      "changesReason": "Correction request",
+      "rejectPlaceholder": "Write the mandatory rejection reason",
+      "changesPlaceholder": "Write the corrections requested from the employee",
+      "audit": "Audit history",
+      "noAudit": "No audit entries yet."
+    },
+    "audit": {
+      "CREATED": "Created",
+      "UPDATED": "Updated",
+      "RECEIPT_UPLOADED": "Receipt uploaded",
+      "AI_ANALYSIS_COMPLETED": "AI analysis completed",
+      "AI_ANALYSIS_FAILED": "AI analysis failed",
+      "SUBMITTED": "Submitted",
+      "RESUBMITTED": "Resubmitted",
+      "APPROVED": "Approved",
+      "REJECTED": "Rejected",
+      "CHANGES_REQUESTED": "Changes requested",
+      "PAID": "Marked paid",
+      "DELETED": "Deleted"
+    },
+    "verification": {
+      "ready": "Ready",
+      "pending": "Pending",
+      "valid": "Valid",
+      "manualRequired": "Manual review",
+      "missingFields": "{{count}} missing field(s)",
+      "noMissingFields": "No missing fields"
+    },
+    "summary": {
+      "toSubmit": "To submit",
+      "waitingApproval": "Waiting approval",
+      "waitingReimbursement": "Waiting reimbursement",
+      "paid": "Paid",
+      "items": "items"
+    },
+    "bulk": {
+      "selected": "{{count}} selected",
+      "selectAll": "Select all expenses"
+    },
+    "email": {
+      "title": "Send expense note",
+      "to": "Recipient",
+      "cc": "CC",
+      "bcc": "BCC",
+      "subject": "Subject",
+      "message": "Message",
+      "attachmentPreview": "Attachment",
+      "defaultSubject": "Expense note {{reference}}",
+      "defaultMessage": "Hello,\n\nPlease find the expense note attached.\n\nRegards,",
+      "historyTitle": "Email history",
+      "noHistory": "No email has been sent for this expense note.",
+      "attachment": "Attachment"
+    },
+    "views": {
+      "list": "List",
+      "kanban": "Kanban",
+      "calendar": "Calendar",
+      "analytics": "Analytics"
+    },
+    "savedFilters": {
+      "save": "Save filter",
+      "saved": "Filter saved.",
+      "namePlaceholder": "Filter name",
+      "nameRequired": "Please enter a filter name.",
+      "favorite": "Favorite",
+      "rename": "Rename",
+      "renamePrompt": "New filter name",
+      "deleteTitle": "Delete this filter?",
+      "deleteDescription": "The filter {{name}} will be removed from your presets."
+    },
+    "analytics": {
+      "currentMonth": "Current month",
+      "currentQuarter": "Current quarter",
+      "currentYear": "Current year",
+      "averageExpense": "Average expense",
+      "averageApprovalTime": "Average approval time",
+      "vatTotals": "VAT totals",
+      "byMonth": "Expenses by month",
+      "byCategory": "Expenses by category",
+      "byEmployee": "Expenses by employee",
+      "byStatus": "Expenses by status",
+      "byCurrency": "Expenses by currency",
+      "topMerchants": "Top merchants"
+    }
   }
 }

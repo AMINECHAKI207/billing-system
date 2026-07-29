@@ -3,7 +3,6 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import readline from 'readline';
-import sharp from 'sharp';
 import { env } from '@config/env';
 import { ApiError } from '@utils/ApiError';
 
@@ -29,6 +28,10 @@ type PendingRequest = {
   reject: (error: Error) => void;
   timeout: NodeJS.Timeout;
 };
+
+type SharpFactory = typeof import('sharp').default;
+
+let sharpFactory: SharpFactory | null = null;
 
 class BackgroundRemovalWorker {
   private child: ChildProcessWithoutNullStreams | null = null;
@@ -186,6 +189,7 @@ export function shutdownBackgroundRemovalWorker() {
 
 async function optimizeTransparentPng(buffer: Buffer) {
   try {
+    const sharp = await getSharp();
     const metadata = await sharp(buffer).metadata();
     if (!metadata.hasAlpha) {
       throw new Error('Le modele IA local n a pas retourne de transparence.');
@@ -202,6 +206,7 @@ async function optimizeTransparentPng(buffer: Buffer) {
 }
 
 async function removeBackgroundFallback(buffer: Buffer) {
+  const sharp = await getSharp();
   const { data, info } = await sharp(buffer)
     .rotate()
     .ensureAlpha()
@@ -230,6 +235,14 @@ async function removeBackgroundFallback(buffer: Buffer) {
   })
     .png({ compressionLevel: 9, adaptiveFiltering: true, palette: false })
     .toBuffer();
+}
+
+async function getSharp() {
+  if (!sharpFactory) {
+    sharpFactory = (await import('sharp')).default;
+  }
+
+  return sharpFactory;
 }
 
 function resolveWorkerScriptPath() {

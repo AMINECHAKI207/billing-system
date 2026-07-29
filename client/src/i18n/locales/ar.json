@@ -916,5 +916,284 @@
     "alreadySigned": "هذا عرض السعر موقع مسبقا.",
     "notSigned": "هذا عرض السعر غير موقع.",
     "approvedDuplicateCatalog": "يوجد عرض سعر معتمد مسبقا لهذا العميل وهذا الكتالوج."
+  },
+  "expenses": {
+    "nav": "المصاريف",
+    "title": "مذكرات المصاريف",
+    "description": "إدارة الإيصالات والمصاريف",
+    "subtitle": "تم العثور علي {{count}} مذكرة مصاريف.",
+    "kpi": {
+      "pending": "قيد الانتظار",
+      "approved": "معتمدة",
+      "rejected": "مرفوضة",
+      "paid": "مدفوعة",
+      "total": "الإجمالي"
+    },
+    "filters": {
+      "search": "البحث",
+      "allCategories": "كل الفصات",
+      "allTypes": "كل الأنواع",
+      "allSources": "كل المصادر",
+      "allStatuses": "كل الحالات",
+      "allEmployees": "كل الموظفين",
+      "amountMin": "الحد الأدنى",
+      "amountMax": "الحد الأقصى",
+      "allCurrencies": "كل العملات",
+      "receipt": "???????",
+      "warnings": "??????? ?????? ?????????",
+      "hasReceipt": "?? ?????",
+      "noReceipt": "???? ?????",
+      "hasWarnings": "?? ???????",
+      "noWarnings": "???? ???????",
+      "aiConfidenceMin": "???? ??? ?????? ?????????"
+    },
+    "fields": {
+      "date": "التاريخ",
+      "merchant": "التاجر",
+      "category": "الفءة",
+      "expenseType": "نوع المصروف",
+      "amountTTC": "المبلغ شامل الضريبة",
+      "amountHT": "المبلغ بدون ضريبة",
+      "vatAmount": "قيمة الضريبة",
+      "vatRate": "نسبة الضريبة",
+      "receiptNumber": "رقم الإيصال",
+      "receipt": "الإيصال",
+      "currency": "العملة",
+      "comment": "تعليق",
+      "source": "المصدر",
+      "actions": "الإجراءات",
+      "employee": "الموظف",
+      "status": "الحالة",
+      "activity": "النشاط"
+    },
+    "source": {
+      "manual": "يدوي",
+      "ai": "ذكاء اصطناعي"
+    },
+    "activity": {
+      "tooltip": "{{count}} حدث في السجل. فتح تفاصيل النشاط."
+    },
+    "form": {
+      "createTitle": "إنشاء مذكرة مصاريف",
+      "editTitle": "تعديل مذكرة المصاريف",
+      "description": "راجع البيانات قبل الحفظ"
+    },
+    "drawer": {
+      "sections": {
+        "extracted": "البيانات المستخرجة",
+        "review": "المراجعة والإرسال",
+        "details": "تفاصيل المصروف",
+        "amounts": "المبالغ والضريبة",
+        "verification": "التحقق"
+      },
+      "steps": {
+        "receipt": "الإيصال",
+        "analysis": "تحليل الذكاء الاصطناعي",
+        "review": "المراجعة",
+        "submit": "إرسال"
+      }
+    },
+    "ai": {
+      "upload": "رفع إيصال للتحليل",
+      "hint": "PDF / PNG / JPG / JPEG - 10 MB",
+      "dragHint": "اسحب الإيصال هنا أو انقر للاختيار",
+      "review": "المراجعة",
+      "processing": "جار تحليل الإيصال",
+      "status": "حالة الذكاء الاصطناعي",
+      "confidence": "ثقة الذكاء الاصطناعي",
+      "processingStatus": "حالة المعالجة",
+      "extractedFields": "الحقول المستخرجة"
+    },
+    "actions": {
+      "create": "إنشاء",
+      "new": "مذكرة مصاريف جديدة",
+      "update": "تحديث",
+      "delete": "حذف",
+      "cancel": "إلغاء",
+      "add": "إضافة",
+      "previous": "السابق",
+      "next": "التالي",
+      "saveDraft": "حفظ كمسودة",
+      "submit": "إرسال",
+      "analyzeSubmit": "تحليل وإرسال",
+      "approve": "اعتماد",
+      "reject": "رفض",
+      "requestChanges": "طلب تعديلات",
+      "markPaid": "تحديد كمدفوعة",
+      "confirm": "تأكيد",
+      "downloadReceipt": "تنزيل الإيصال",
+      "review": "المراجعة",
+      "zoomIn": "تكبير",
+      "zoomOut": "تصغير",
+      "replaceReceipt": "استبدال الإيصال",
+      "analyzeAgain": "إعادة التحليل",
+      "removeReceipt": "إزالة",
+      "import": "رفع",
+      "newShort": "جديد",
+      "filters": "الفلاتر",
+      "previewPdf": "معاينة PDF",
+      "downloadPdf": "تنزيل PDF",
+      "printPdf": "طباعة",
+      "sendEmail": "إرسال بالبريد",
+      "emailHistory": "سجل البريد",
+      "exportExcel": "Excel",
+      "exportPdf": "PDF",
+      "exportZip": "ZIP"
+    },
+    "messages": {
+      "created": "تمت العملية بنجاح.",
+      "updated": "تمت العملية بنجاح.",
+      "deleted": "تمت العملية بنجاح.",
+      "saveError": "تعذرت العملية.",
+      "deleteError": "تعذرت العملية.",
+      "analyzed": "تمت العملية بنجاح.",
+      "manualReview": "تحتاج مراجعة",
+      "analyzeError": "تعذرت العملية.",
+      "categoryCreated": "تمت العملية بنجاح.",
+      "categoryError": "تعذرت العملية.",
+      "typeCreated": "تمت العملية بنجاح.",
+      "typeError": "تعذرت العملية.",
+      "submitted": "تمت العملية بنجاح.",
+      "submitError": "تعذرت العملية.",
+      "approved": "تمت العملية بنجاح.",
+      "approveError": "تعذرت العملية.",
+      "rejected": "تمت العملية بنجاح.",
+      "rejectError": "تعذرت العملية.",
+      "changesRequested": "تعديلات مطلوبة",
+      "changesError": "تعذرت العملية.",
+      "paid": "تمت العملية بنجاح.",
+      "paidError": "تعذرت العملية.",
+      "pdfPreviewed": "تم فتح معاينة PDF.",
+      "pdfDownloaded": "تم تنزيل PDF.",
+      "pdfPrinted": "PDF جاهز للطباعة.",
+      "pdfError": "تعذر إنشاء PDF.",
+      "emailSent": "تم إرسال البريد.",
+      "emailError": "تعذر إرسال البريد.",
+      "exported": "تم إنشاء التصدير.",
+      "exportError": "تعذر إنشاء التصدير."
+    },
+    "confirm": {
+      "deleteTitle": "حذف مذكرة المصاريف؟",
+      "deleteDescription": "لا يمكن التراجع عن هذا الإجراء."
+    },
+    "empty": {
+      "title": "لا توجد مذكرات مصاريف بعد",
+      "notes": "لم يتم العثور علي مذكرات مصاريف.",
+      "merchant": "لا يوجد تاجر",
+      "preview": "لا توجد معاينة",
+      "noColumnItems": "?? ???? ??????",
+      "noAnalytics": "?? ???? ?????? ???????."
+    },
+    "pagination": {
+      "page": "الصفحة {{page}} من {{total}}",
+      "of": "من"
+    },
+    "manage": {
+      "title": "الفصات والأنواع",
+      "categoryName": "فءة جديدة",
+      "typeName": "نوع جديد"
+    },
+    "status": {
+      "active": "نشط",
+      "inactive": "غير نشط",
+      "workflow": {
+        "DRAFT": "مسودة",
+        "PROCESSING": "قيد المعالجة",
+        "NEEDS_REVIEW": "تحتاج مراجعة",
+        "SUBMITTED": "مرسلة",
+        "CHANGES_REQUESTED": "تعديلات مطلوبة",
+        "APPROVED": "معتمدة",
+        "REJECTED": "مرفوضة",
+        "PAID": "مدفوعة"
+      }
+    },
+    "review": {
+      "title": "مراجعة الإدارة",
+      "receiptPreview": "معاينة الإيصال",
+      "rejectionReason": "سبب الرفض",
+      "changesReason": "طلب التصحيح",
+      "rejectPlaceholder": "اكتب سبب الرفض",
+      "changesPlaceholder": "اكتب التعديلات المطلوبة",
+      "audit": "سجل التدقيق",
+      "noAudit": "لا توجد عمليات تدقيق."
+    },
+    "audit": {
+      "CREATED": "تم الإنشاء",
+      "UPDATED": "تم التحديث",
+      "RECEIPT_UPLOADED": "تم رفع الإيصال",
+      "AI_ANALYSIS_COMPLETED": "اكتمل تحليل الذكاء الاصطناعي",
+      "AI_ANALYSIS_FAILED": "فشل تحليل الذكاء الاصطناعي",
+      "SUBMITTED": "مرسلة",
+      "RESUBMITTED": "تمت إعادة الإرسال",
+      "APPROVED": "معتمدة",
+      "REJECTED": "مرفوضة",
+      "CHANGES_REQUESTED": "تعديلات مطلوبة",
+      "PAID": "مدفوعة",
+      "DELETED": "تم الحذف"
+    },
+    "verification": {
+      "ready": "جاهز",
+      "pending": "قيد الانتظار",
+      "valid": "صالح",
+      "manualRequired": "مراجعة يدوية",
+      "missingFields": "{{count}} حقل مفقود",
+      "noMissingFields": "لا توجد حقول مفقودة"
+    },
+    "summary": {
+      "toSubmit": "للإرسال",
+      "waitingApproval": "في انتظار الاعتماد",
+      "waitingReimbursement": "في انتظار التعويض",
+      "paid": "مدفوعة",
+      "items": "عناصر"
+    },
+    "bulk": {
+      "selected": "{{count}} محدد",
+      "selectAll": "تحديد كل المصاريف"
+    },
+    "email": {
+      "title": "إرسال مذكرة المصاريف",
+      "to": "المستلم",
+      "cc": "نسخة",
+      "bcc": "نسخة مخفية",
+      "subject": "الموضوع",
+      "message": "الرسالة",
+      "attachmentPreview": "المرفق",
+      "defaultSubject": "مذكرة مصاريف {{reference}}",
+      "defaultMessage": "مرحبا،\n\nيرجى الاطلاع على مذكرة المصاريف المرفقة.\n\nمع التحية،",
+      "historyTitle": "سجل البريد الإلكتروني",
+      "noHistory": "لم يتم إرسال أي بريد لهذه المذكرة.",
+      "attachment": "المرفق"
+    },
+    "views": {
+      "list": "?????",
+      "kanban": "??????",
+      "calendar": "?????",
+      "analytics": "???????"
+    },
+    "savedFilters": {
+      "save": "??? ??????",
+      "saved": "?? ??? ??????.",
+      "namePlaceholder": "??? ??????",
+      "nameRequired": "???? ????? ??? ??????.",
+      "favorite": "????",
+      "rename": "????? ?????",
+      "renamePrompt": "??? ?????? ??????",
+      "deleteTitle": "??? ??? ???????",
+      "deleteDescription": "???? ??? ?????? {{name}} ?? ????????."
+    },
+    "analytics": {
+      "currentMonth": "????? ??????",
+      "currentQuarter": "????? ??????",
+      "currentYear": "????? ???????",
+      "averageExpense": "????? ???????",
+      "averageApprovalTime": "????? ??? ????????",
+      "vatTotals": "?????? ???????",
+      "byMonth": "???????? ??? ?????",
+      "byCategory": "???????? ??? ?????",
+      "byEmployee": "???????? ??? ??????",
+      "byStatus": "???????? ??? ??????",
+      "byCurrency": "???????? ??? ??????",
+      "topMerchants": "??? ??????"
+    }
   }
 }

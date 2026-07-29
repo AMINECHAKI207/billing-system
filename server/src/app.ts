@@ -21,6 +21,7 @@ import reportRouter from '@modules/report/report.routes';
 import userRouter from '@modules/user/user.routes';
 import rbacRouter from '@modules/rbac/rbac.routes';
 import recurringRouter from '@modules/recurring/recurring.routes';
+import expenseRouter from '@modules/expense/expense.routes';
 
 export function createApp(): Application {
   const app = express();
@@ -74,6 +75,7 @@ export function createApp(): Application {
   app.use('/api/reminders', reminderRouter);
   app.use('/api/settings', settingsRouter);
   app.use('/api/products', productRouter);
+  app.use('/api/expense-notes', expenseRouter);
   app.use('/api/payments', paymentRouter);
   app.use('/api/reports', reportRouter);
   app.use('/api/users', userRouter);

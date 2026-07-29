@@ -84,6 +84,28 @@ enum RecurringExecutionStatus {
   SKIPPED
 }
 
+enum ExpenseSource {
+  MANUAL
+  AI
+}
+
+enum ExpenseAIStatus {
+  VALIDATED
+  REQUIRES_MANUAL_REVIEW
+  FAILED
+}
+
+enum ExpenseNoteStatus {
+  DRAFT
+  PROCESSING
+  NEEDS_REVIEW
+  SUBMITTED
+  CHANGES_REQUESTED
+  APPROVED
+  REJECTED
+  PAID
+}
+
 // ─── Models ──────────────────────────────────────────────────────────────────
 
 model User {
@@ -111,6 +133,15 @@ model User {
   invoiceEmailLogs InvoiceEmailLog[]
   assignedClients UserClientAssignment[]
   recurringPlans  RecurringPlan[]
+  expenseNotes     ExpenseNote[] @relation("ExpenseNoteCreatedBy")
+  approvedExpenseNotes ExpenseNote[] @relation("ExpenseNoteApprovedBy")
+  rejectedExpenseNotes ExpenseNote[] @relation("ExpenseNoteRejectedBy")
+  changesRequestedExpenseNotes ExpenseNote[] @relation("ExpenseNoteChangesRequestedBy")
+  paidExpenseNotes ExpenseNote[] @relation("ExpenseNotePaidBy")
+  expenseAttachments ExpenseAttachment[] @relation("ExpenseAttachmentUploadedBy")
+  expenseAIAnalyses ExpenseAIAnalysis[] @relation("ExpenseAIAnalysisRequestedBy")
+  expenseAuditLogs ExpenseAuditLog[] @relation("ExpenseAuditActor")
+  expenseEmailLogs ExpenseEmailLog[]
   rbacRole       RbacRole? @relation(fields: [rbacRoleId], references: [id], onDelete: SetNull)
 
   @@map("users")
@@ -419,6 +450,195 @@ model Product {
   @@map("products")
   @@index([name])
   @@index([isActive])
+}
+
+model ExpenseCategory {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique @db.VarChar(120)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  expenseTypes ExpenseType[]
+  expenseNotes ExpenseNote[]
+
+  @@map("expense_categories")
+  @@index([active])
+}
+
+model ExpenseType {
+  id         String   @id @default(uuid()) @db.Uuid
+  categoryId String   @map("category_id") @db.Uuid
+  name       String   @db.VarChar(120)
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  category     ExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  expenseNotes ExpenseNote[]
+
+  @@unique([categoryId, name])
+  @@map("expense_types")
+  @@index([categoryId])
+  @@index([active])
+}
+
+model ExpenseNote {
+  id             String        @id @default(uuid()) @db.Uuid
+  categoryId     String        @map("category_id") @db.Uuid
+  expenseTypeId  String        @map("expense_type_id") @db.Uuid
+  createdById    String        @map("created_by") @db.Uuid
+  status         ExpenseNoteStatus @default(DRAFT)
+  expenseDate    DateTime      @map("expense_date") @db.Date
+  amountTTC      Decimal       @map("amount_ttc") @db.Decimal(12, 2)
+  amountHT       Decimal?      @map("amount_ht") @db.Decimal(12, 2)
+  vatAmount      Decimal       @default(0) @map("vat_amount") @db.Decimal(12, 2)
+  vatRate        Decimal       @default(0) @map("vat_rate") @db.Decimal(5, 2)
+  comment        String?       @db.Text
+  merchantName   String?       @map("merchant_name") @db.VarChar(255)
+  receiptNumber  String?       @map("receipt_number") @db.VarChar(255)
+  documentNumber String?       @map("document_number") @db.VarChar(255)
+  currency       String        @default("MAD") @db.VarChar(10)
+  aiConfidence   Decimal?      @map("ai_confidence") @db.Decimal(5, 4)
+  aiWarnings     Json?         @map("ai_warnings")
+  source         ExpenseSource @default(MANUAL)
+  submittedAt    DateTime?     @map("submitted_at")
+  approvedById   String?       @map("approved_by") @db.Uuid
+  approvedAt     DateTime?     @map("approved_at")
+  rejectedById   String?       @map("rejected_by") @db.Uuid
+  rejectedAt     DateTime?     @map("rejected_at")
+  rejectionReason String?      @map("rejection_reason") @db.Text
+  changesRequestedById String? @map("changes_requested_by") @db.Uuid
+  changesRequestedAt DateTime? @map("changes_requested_at")
+  changesRequestedReason String? @map("changes_requested_reason") @db.Text
+  paidById       String?       @map("paid_by") @db.Uuid
+  paidAt         DateTime?     @map("paid_at")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  category     ExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  expenseType  ExpenseType     @relation(fields: [expenseTypeId], references: [id], onDelete: Restrict)
+  createdBy    User            @relation("ExpenseNoteCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedBy   User?           @relation("ExpenseNoteApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  rejectedBy   User?           @relation("ExpenseNoteRejectedBy", fields: [rejectedById], references: [id], onDelete: SetNull)
+  changesRequestedBy User?     @relation("ExpenseNoteChangesRequestedBy", fields: [changesRequestedById], references: [id], onDelete: SetNull)
+  paidBy       User?           @relation("ExpenseNotePaidBy", fields: [paidById], references: [id], onDelete: SetNull)
+  attachments  ExpenseAttachment[]
+  aiAnalyses   ExpenseAIAnalysis[]
+  auditLogs    ExpenseAuditLog[]
+  emailLogs    ExpenseEmailLog[]
+
+  @@map("expense_notes")
+  @@index([categoryId])
+  @@index([expenseTypeId])
+  @@index([createdById])
+  @@index([status])
+  @@index([submittedAt])
+  @@index([expenseDate])
+  @@index([source])
+  @@index([approvedById])
+  @@index([rejectedById])
+  @@index([changesRequestedById])
+  @@index([paidById])
+}
+
+model ExpenseAttachment {
+  id            String   @id @default(uuid()) @db.Uuid
+  expenseNoteId String?  @map("expense_note_id") @db.Uuid
+  uploadedById  String   @map("uploaded_by") @db.Uuid
+  originalName  String   @map("original_name") @db.VarChar(255)
+  fileName      String   @map("file_name") @db.VarChar(255)
+  mimeType      String   @map("mime_type") @db.VarChar(120)
+  sizeBytes     Int      @map("size_bytes")
+  storageKey    String   @map("storage_key") @db.VarChar(500)
+  fileUrl       String   @map("file_url") @db.VarChar(500)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  expenseNote ExpenseNote? @relation(fields: [expenseNoteId], references: [id], onDelete: SetNull)
+  uploadedBy  User         @relation("ExpenseAttachmentUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
+  aiAnalyses  ExpenseAIAnalysis[]
+
+  @@map("expense_attachments")
+  @@index([expenseNoteId])
+  @@index([uploadedById])
+}
+
+model ExpenseAIAnalysis {
+  id                   String          @id @default(uuid()) @db.Uuid
+  attachmentId         String          @map("attachment_id") @db.Uuid
+  expenseNoteId        String?         @map("expense_note_id") @db.Uuid
+  requestedById        String          @map("requested_by") @db.Uuid
+  provider             String          @default("openai") @db.VarChar(80)
+  model                String          @db.VarChar(120)
+  status               ExpenseAIStatus
+  attempts             Int             @default(0)
+  rawResponse          Json?           @map("raw_response")
+  extractedData        Json?           @map("extracted_data")
+  validationErrors     Json?           @map("validation_errors")
+  confidence           Json?
+  warnings             Json?
+  requiresManualReview Boolean         @default(false) @map("requires_manual_review")
+  processingDurationMs Int?            @map("processing_duration_ms")
+  completedAt          DateTime?       @map("completed_at")
+  createdAt            DateTime        @default(now()) @map("created_at")
+  updatedAt            DateTime        @updatedAt @map("updated_at")
+
+  attachment  ExpenseAttachment @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
+  expenseNote ExpenseNote?      @relation(fields: [expenseNoteId], references: [id], onDelete: SetNull)
+  requestedBy User              @relation("ExpenseAIAnalysisRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+
+  @@map("expense_ai_analyses")
+  @@index([attachmentId])
+  @@index([expenseNoteId])
+  @@index([requestedById])
+  @@index([status])
+}
+
+model ExpenseAuditLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  expenseNoteId  String   @map("expense_note_id") @db.Uuid
+  action         String   @db.VarChar(80)
+  actorId        String   @map("actor_id") @db.Uuid
+  previousValues Json?    @map("previous_values")
+  newValues      Json?    @map("new_values")
+  reason         String?  @db.Text
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  expenseNote ExpenseNote @relation(fields: [expenseNoteId], references: [id], onDelete: Cascade)
+  actor       User        @relation("ExpenseAuditActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@map("expense_audit_logs")
+  @@index([expenseNoteId])
+  @@index([actorId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model ExpenseEmailLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  expenseNoteId  String   @map("expense_note_id") @db.Uuid
+  sentById       String?  @map("sent_by") @db.Uuid
+  recipientEmail String   @map("recipient_email") @db.VarChar(255)
+  cc             String?  @db.VarChar(1000)
+  bcc            String?  @db.VarChar(1000)
+  subject        String   @db.VarChar(255)
+  message        String   @db.Text
+  pdfLanguage    String   @default("fr") @map("pdf_language") @db.VarChar(10)
+  attachmentName String   @map("attachment_name") @db.VarChar(255)
+  status         String   @db.VarChar(30)
+  deliveryMode   String?  @map("delivery_mode") @db.VarChar(30)
+  messageId      String?  @map("message_id") @db.VarChar(255)
+  filePath       String?  @map("file_path") @db.VarChar(1000)
+  errorMessage   String?  @map("error_message") @db.Text
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  expenseNote ExpenseNote @relation(fields: [expenseNoteId], references: [id], onDelete: Cascade)
+  sentBy      User?       @relation(fields: [sentById], references: [id], onDelete: SetNull)
+
+  @@map("expense_email_logs")
+  @@index([expenseNoteId])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model InvoiceItem {

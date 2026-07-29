@@ -1,4 +1,4 @@
-const formulaInjectionPattern = /^\s*=/;
+const formulaInjectionPattern = /^\s*[=+\-@]/;
 
 export function sanitizeExcelString(value: string): string {
   return formulaInjectionPattern.test(value) ? `'${value}` : value;

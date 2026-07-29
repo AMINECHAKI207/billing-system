@@ -16,6 +16,14 @@ import type {
   CreateCustomerForm,
   CreatePaymentForm,
   CreateProductForm,
+  ExpenseAnalytics,
+  ExpenseAnalysisSuggestion,
+  ExpenseCategory,
+  ExpenseEmailLog,
+  ExpenseNote,
+  ExpenseNoteFilters,
+  ExpenseNoteForm,
+  ExpenseType,
   CreateUserForm,
   Invoice,
   InvoiceFilters,
@@ -766,4 +774,210 @@ export async function updateRecurringPlanStatus(planId: string, status: 'ACTIVE'
 }
 export async function runRecurringPlan(planId: string): Promise<void> {
   await api.post(`/recurring-plans/${planId}/run`);
+}
+
+export type ExpenseNoteListResponse = {
+  data: ExpenseNote[];
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+};
+
+export async function getExpenseCategories(active?: boolean): Promise<ExpenseCategory[]> {
+  const response = await api.get<ApiResponse<{ categories: ExpenseCategory[] }>>('/expense-notes/categories', {
+    params: active === undefined ? undefined : { active },
+  });
+  return response.data.data.categories;
+}
+
+export async function createExpenseCategory(input: { name: string; active?: boolean }): Promise<ExpenseCategory> {
+  const response = await api.post<ApiResponse<{ category: ExpenseCategory }>>('/expense-notes/categories', input);
+  return response.data.data.category;
+}
+
+export async function updateExpenseCategory(id: string, input: { name?: string; active?: boolean }): Promise<ExpenseCategory> {
+  const response = await api.patch<ApiResponse<{ category: ExpenseCategory }>>(`/expense-notes/categories/${id}`, input);
+  return response.data.data.category;
+}
+
+export async function getExpenseTypes(filters: { categoryId?: string; active?: boolean } = {}): Promise<ExpenseType[]> {
+  const response = await api.get<ApiResponse<{ types: ExpenseType[] }>>('/expense-notes/types', {
+    params: filters,
+  });
+  return response.data.data.types;
+}
+
+export async function createExpenseType(input: { categoryId: string; name: string; active?: boolean }): Promise<ExpenseType> {
+  const response = await api.post<ApiResponse<{ type: ExpenseType }>>('/expense-notes/types', input);
+  return response.data.data.type;
+}
+
+export async function updateExpenseType(id: string, input: { categoryId?: string; name?: string; active?: boolean }): Promise<ExpenseType> {
+  const response = await api.patch<ApiResponse<{ type: ExpenseType }>>(`/expense-notes/types/${id}`, input);
+  return response.data.data.type;
+}
+
+export async function getExpenseNotes(filters: ExpenseNoteFilters = {}): Promise<ExpenseNoteListResponse> {
+  const response = await api.get<ApiResponse<ExpenseNoteListResponse>>('/expense-notes', {
+    params: filters,
+  });
+  return response.data.data;
+}
+
+export async function getExpenseAnalytics(filters: ExpenseNoteFilters = {}): Promise<ExpenseAnalytics> {
+  const response = await api.get<ApiResponse<{ analytics: ExpenseAnalytics }>>('/expense-notes/analytics', {
+    params: filters,
+  });
+  return response.data.data.analytics;
+}
+
+export async function createExpenseNote(input: ExpenseNoteForm): Promise<ExpenseNote> {
+  const response = await api.post<ApiResponse<{ expenseNote: ExpenseNote }>>('/expense-notes', input);
+  return response.data.data.expenseNote;
+}
+
+export async function updateExpenseNote(id: string, input: Partial<ExpenseNoteForm>): Promise<ExpenseNote> {
+  const response = await api.patch<ApiResponse<{ expenseNote: ExpenseNote }>>(`/expense-notes/${id}`, input);
+  return response.data.data.expenseNote;
+}
+
+export async function deleteExpenseNote(id: string): Promise<void> {
+  await api.delete(`/expense-notes/${id}`);
+}
+
+export async function submitExpenseNote(id: string): Promise<ExpenseNote> {
+  const response = await api.post<ApiResponse<{ expenseNote: ExpenseNote }>>(`/expense-notes/${id}/submit`);
+  return response.data.data.expenseNote;
+}
+
+export async function approveExpenseNote(id: string): Promise<ExpenseNote> {
+  const response = await api.post<ApiResponse<{ expenseNote: ExpenseNote }>>(`/expense-notes/${id}/approve`);
+  return response.data.data.expenseNote;
+}
+
+export async function rejectExpenseNote(id: string, reason: string): Promise<ExpenseNote> {
+  const response = await api.post<ApiResponse<{ expenseNote: ExpenseNote }>>(`/expense-notes/${id}/reject`, { reason });
+  return response.data.data.expenseNote;
+}
+
+export async function requestExpenseNoteChanges(id: string, reason: string): Promise<ExpenseNote> {
+  const response = await api.post<ApiResponse<{ expenseNote: ExpenseNote }>>(`/expense-notes/${id}/request-changes`, { reason });
+  return response.data.data.expenseNote;
+}
+
+export async function markExpenseNotePaid(id: string): Promise<ExpenseNote> {
+  const response = await api.post<ApiResponse<{ expenseNote: ExpenseNote }>>(`/expense-notes/${id}/mark-paid`);
+  return response.data.data.expenseNote;
+}
+
+export async function downloadExpenseAttachment(attachmentId: string): Promise<void> {
+  const response = await api.get<Blob>(`/expense-notes/attachments/${attachmentId}/download`, {
+    responseType: 'blob',
+  });
+  const blobUrl = URL.createObjectURL(response.data);
+  const link = document.createElement('a');
+  link.href = blobUrl;
+  link.download = `expense-receipt-${attachmentId}`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(blobUrl);
+}
+
+export async function deleteExpenseAttachment(attachmentId: string): Promise<void> {
+  await api.delete(`/expense-notes/attachments/${attachmentId}`);
+}
+
+export function getExpenseNotePdfUrl(id: string, disposition: 'inline' | 'attachment' = 'attachment', language = 'fr') {
+  const params = new URLSearchParams({ disposition, language });
+  return `/expense-notes/${id}/pdf?${params.toString()}`;
+}
+
+export function getExpenseNotePdfPreviewUrl(id: string, language = 'fr') {
+  const params = new URLSearchParams({ language });
+  return `/expense-notes/${id}/pdf/preview?${params.toString()}`;
+}
+
+export async function previewExpenseNotePdf(id: string, language = 'fr'): Promise<void> {
+  window.open(`/api${getExpenseNotePdfPreviewUrl(id, language)}`, '_blank', 'noopener,noreferrer');
+}
+
+export async function downloadExpenseNotePdf(id: string, reference: string, language = 'fr'): Promise<void> {
+  const response = await api.get<Blob>(getExpenseNotePdfUrl(id, 'attachment', language), { responseType: 'blob' });
+  downloadBlob(response.data, `${reference}.pdf`);
+}
+
+export async function printExpenseNotePdf(id: string, language = 'fr'): Promise<void> {
+  const response = await api.get<Blob>(getExpenseNotePdfUrl(id, 'inline', language), { responseType: 'blob' });
+  const url = URL.createObjectURL(response.data);
+  const printWindow = window.open(url, '_blank');
+  if (printWindow) {
+    printWindow.addEventListener('load', () => printWindow.print(), { once: true });
+  }
+}
+
+export async function sendExpenseNoteEmail(
+  id: string,
+  input: {
+    to?: string;
+    cc?: string[];
+    bcc?: string[];
+    subject?: string;
+    message?: string;
+    pdfLanguage?: 'en' | 'fr' | 'ar';
+  }
+): Promise<{ expenseNote: ExpenseNote; emailLog: ExpenseEmailLog; delivery: { mode: 'smtp' | 'local'; filePath?: string; messageId?: string } | null }> {
+  const response = await api.post<ApiResponse<{ expenseNote: ExpenseNote; emailLog: ExpenseEmailLog; delivery: { mode: 'smtp' | 'local'; filePath?: string; messageId?: string } | null }>>(`/expense-notes/${id}/email`, input);
+  return response.data.data;
+}
+
+export async function getExpenseNoteEmailHistory(id: string): Promise<ExpenseEmailLog[]> {
+  const response = await api.get<ApiResponse<{ emailLogs: ExpenseEmailLog[] }>>(`/expense-notes/${id}/email-history`);
+  return response.data.data.emailLogs;
+}
+
+export async function resendExpenseNoteEmail(emailLogId: string): Promise<{ emailLog: ExpenseEmailLog }> {
+  const response = await api.post<ApiResponse<{ emailLog: ExpenseEmailLog }>>(`/expense-notes/email-logs/${emailLogId}/resend`);
+  return response.data.data;
+}
+
+export async function exportExpenseNotes(input: {
+  ids?: string[];
+  filters?: Omit<ExpenseNoteFilters, 'page' | 'limit'>;
+  format: 'pdf' | 'zip' | 'excel' | 'csv';
+  language?: 'en' | 'fr' | 'ar';
+  includeReceipts?: boolean;
+}): Promise<void> {
+  const response = await api.post<Blob>('/expense-notes/export', input, { responseType: 'blob' });
+  const extension = input.format === 'excel' ? 'xlsx' : input.format;
+  downloadBlob(response.data, `expense-notes-${new Date().toISOString().slice(0, 10)}.${extension}`);
+}
+
+export async function analyzeExpenseReceipt(file: File): Promise<{
+  attachment: { id: string; fileUrl: string; originalName: string };
+  analysis: { id: string; attempts: number; requiresManualReview: boolean };
+  suggestedExpense: ExpenseAnalysisSuggestion;
+}> {
+  const formData = new FormData();
+  formData.append('receipt', file);
+  const response = await api.post<ApiResponse<{
+    attachment: { id: string; fileUrl: string; originalName: string };
+    analysis: { id: string; attempts: number; requiresManualReview: boolean };
+    suggestedExpense: ExpenseAnalysisSuggestion;
+  }>>('/expense-notes/analyze-receipt', formData);
+  return response.data.data;
+}
+
+function downloadBlob(blob: Blob, fileName: string) {
+  const blobUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = blobUrl;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(blobUrl);
 }

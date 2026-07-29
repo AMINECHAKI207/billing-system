@@ -17,6 +17,8 @@ type EmailDeliveryResult = {
 
 export async function sendEmail(message: {
   to: string;
+  cc?: string[];
+  bcc?: string[];
   subject: string;
   text: string;
   attachments?: EmailAttachment[];
@@ -41,6 +43,8 @@ export async function sendEmail(message: {
       address: env.SMTP_FROM_EMAIL,
     },
     to: message.to,
+    cc: message.cc,
+    bcc: message.bcc,
     subject: message.subject,
     text: message.text,
     attachments: message.attachments,
@@ -81,6 +85,8 @@ function shouldUseLocalEmailFallback() {
 
 async function writeLocalEmail(message: {
   to: string;
+  cc?: string[];
+  bcc?: string[];
   subject: string;
   text: string;
   attachments?: EmailAttachment[];
@@ -106,6 +112,8 @@ async function writeLocalEmail(message: {
     emailPath,
     [
       `To: ${message.to}`,
+      `Cc: ${message.cc?.join(', ') ?? ''}`,
+      `Bcc: ${message.bcc?.join(', ') ?? ''}`,
       `Subject: ${message.subject}`,
       `Mode: local development fallback`,
       '',

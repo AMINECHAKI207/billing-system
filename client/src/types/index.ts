@@ -34,6 +34,16 @@ export type ReminderStatus = 'SENT' | 'FAILED' | 'PENDING';
 export type RecurringFrequency = 'WEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'YEARLY';
 export type RecurringPlanStatus = 'ACTIVE' | 'PAUSED' | 'CANCELLED' | 'COMPLETED';
 export type RecurringExecutionStatus = 'SUCCESS' | 'FAILED' | 'SKIPPED';
+export type ExpenseSource = 'MANUAL' | 'AI';
+export type ExpenseNoteStatus =
+  | 'DRAFT'
+  | 'PROCESSING'
+  | 'NEEDS_REVIEW'
+  | 'SUBMITTED'
+  | 'CHANGES_REQUESTED'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'PAID';
 
 export interface RecurringPlanItem {
   id: string; planId: string; description: string; unit?: string; quantity: number; unitPrice: number; taxRate: number; sortOrder: number;
@@ -153,6 +163,200 @@ export interface Product {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ExpenseCategory {
+  id: string;
+  name: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+  expenseTypes?: ExpenseType[];
+}
+
+export interface ExpenseType {
+  id: string;
+  categoryId: string;
+  name: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+  category?: ExpenseCategory;
+}
+
+export interface ExpenseAttachment {
+  id: string;
+  expenseNoteId?: string | null;
+  originalName: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  fileUrl: string;
+  createdAt: string;
+}
+
+export interface ExpenseAIAnalysis {
+  id: string;
+  attachmentId: string;
+  expenseNoteId?: string | null;
+  model: string;
+  status: 'VALIDATED' | 'REQUIRES_MANUAL_REVIEW' | 'FAILED';
+  attempts: number;
+  extractedData?: unknown;
+  validationErrors?: unknown;
+  confidence?: Record<string, number>;
+  warnings?: string[];
+  requiresManualReview: boolean;
+  processingDurationMs?: number | null;
+  completedAt?: string | null;
+  createdAt: string;
+}
+
+export interface ExpenseAuditLog {
+  id: string;
+  expenseNoteId: string;
+  action: string;
+  actorId: string;
+  previousValues?: unknown;
+  newValues?: unknown;
+  reason?: string | null;
+  createdAt: string;
+  actor?: Pick<User, 'id' | 'name' | 'email'>;
+}
+
+export interface ExpenseEmailLog {
+  id: string;
+  expenseNoteId: string;
+  sentById?: string | null;
+  recipientEmail: string;
+  cc?: string | null;
+  bcc?: string | null;
+  subject: string;
+  message: string;
+  pdfLanguage: 'en' | 'fr' | 'ar';
+  attachmentName: string;
+  status: string;
+  deliveryMode?: string | null;
+  messageId?: string | null;
+  filePath?: string | null;
+  errorMessage?: string | null;
+  createdAt: string;
+  sentBy?: Pick<User, 'id' | 'name' | 'email'> | null;
+}
+
+export interface ExpenseNote {
+  id: string;
+  categoryId: string;
+  expenseTypeId: string;
+  createdById: string;
+  status: ExpenseNoteStatus;
+  expenseDate: string;
+  amountTTC: number;
+  amountHT?: number | null;
+  vatAmount: number;
+  vatRate: number;
+  comment?: string | null;
+  merchantName?: string | null;
+  receiptNumber?: string | null;
+  documentNumber?: string | null;
+  currency: string;
+  aiConfidence?: number | null;
+  aiWarnings?: string[] | null;
+  source: ExpenseSource;
+  createdAt: string;
+  updatedAt: string;
+  submittedAt?: string | null;
+  approvedById?: string | null;
+  approvedAt?: string | null;
+  rejectedById?: string | null;
+  rejectedAt?: string | null;
+  rejectionReason?: string | null;
+  changesRequestedById?: string | null;
+  changesRequestedAt?: string | null;
+  changesRequestedReason?: string | null;
+  paidById?: string | null;
+  paidAt?: string | null;
+  category?: ExpenseCategory;
+  expenseType?: ExpenseType;
+  createdBy?: Pick<User, 'id' | 'name' | 'email'>;
+  approvedBy?: Pick<User, 'id' | 'name' | 'email'> | null;
+  rejectedBy?: Pick<User, 'id' | 'name' | 'email'> | null;
+  changesRequestedBy?: Pick<User, 'id' | 'name' | 'email'> | null;
+  paidBy?: Pick<User, 'id' | 'name' | 'email'> | null;
+  attachments?: ExpenseAttachment[];
+  aiAnalyses?: ExpenseAIAnalysis[];
+  auditLogs?: ExpenseAuditLog[];
+  emailLogs?: ExpenseEmailLog[];
+}
+
+export interface ExpenseNoteForm {
+  categoryId: string;
+  expenseTypeId: string;
+  expenseDate: string;
+  amountTTC: number;
+  amountHT?: number | null;
+  vatAmount: number;
+  vatRate: number;
+  comment?: string | null;
+  merchantName?: string | null;
+  receiptNumber?: string | null;
+  currency: string;
+  source?: ExpenseSource;
+  submit?: boolean;
+  attachmentId?: string;
+  aiAnalysisId?: string;
+}
+
+export interface ExpenseNoteFilters {
+  page?: number;
+  limit?: number;
+  search?: string;
+  categoryId?: string;
+  expenseTypeId?: string;
+  source?: ExpenseSource;
+  status?: ExpenseNoteStatus;
+  employeeId?: string;
+  amountMin?: string;
+  amountMax?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  currency?: string;
+  hasReceipt?: boolean;
+  hasWarnings?: boolean;
+  aiConfidenceMin?: string;
+}
+
+export interface ExpenseAnalyticsGroup {
+  key: string;
+  count: number;
+  amountTTC: number;
+  vatAmount: number;
+}
+
+export interface ExpenseAnalytics {
+  totals: {
+    count: number;
+    amountTTC: number;
+    amountHT: number;
+    vatAmount: number;
+    averageExpense: number;
+    averageApprovalHours: number;
+    currentMonth: number;
+    currentQuarter: number;
+    currentYear: number;
+  };
+  byMonth: ExpenseAnalyticsGroup[];
+  byCategory: ExpenseAnalyticsGroup[];
+  byEmployee: ExpenseAnalyticsGroup[];
+  byStatus: ExpenseAnalyticsGroup[];
+  byCurrency: ExpenseAnalyticsGroup[];
+  topMerchants: ExpenseAnalyticsGroup[];
+}
+
+export interface ExpenseAnalysisSuggestion extends Partial<ExpenseNoteForm> {
+  confidence?: Record<string, number>;
+  warnings?: string[];
+  requiresManualReview: boolean;
 }
 
 export interface InvoiceItem {

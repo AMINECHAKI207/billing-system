@@ -1,4 +1,5 @@
 import {
+  ExpenseSource,
   InvoiceStatus,
   PaymentMethod,
   PrismaClient,
@@ -25,6 +26,13 @@ async function main() {
   await prisma.recurringPlan.deleteMany();
   await prisma.reminder.deleteMany();
   await prisma.payment.deleteMany();
+  await prisma.expenseAuditLog.deleteMany();
+  await prisma.expenseEmailLog.deleteMany();
+  await prisma.expenseAIAnalysis.deleteMany();
+  await prisma.expenseAttachment.deleteMany();
+  await prisma.expenseNote.deleteMany();
+  await prisma.expenseType.deleteMany();
+  await prisma.expenseCategory.deleteMany();
   await prisma.invoiceEmailLog.deleteMany();
   await prisma.invoiceItem.deleteMany();
   await prisma.invoice.deleteMany();
@@ -119,6 +127,46 @@ async function main() {
     ],
   });
 
+  const expenseCategories = await Promise.all([
+    prisma.expenseCategory.create({
+      data: {
+        name: 'Transport',
+        expenseTypes: {
+          create: [
+            { name: 'Taxi' },
+            { name: 'Fuel' },
+            { name: 'Train' },
+          ],
+        },
+      },
+      include: { expenseTypes: true },
+    }),
+    prisma.expenseCategory.create({
+      data: {
+        name: 'Meals',
+        expenseTypes: {
+          create: [
+            { name: 'Restaurant' },
+            { name: 'Coffee' },
+          ],
+        },
+      },
+      include: { expenseTypes: true },
+    }),
+    prisma.expenseCategory.create({
+      data: {
+        name: 'Office',
+        expenseTypes: {
+          create: [
+            { name: 'Supplies' },
+            { name: 'Software' },
+          ],
+        },
+      },
+      include: { expenseTypes: true },
+    }),
+  ]);
+
   const acme = await prisma.customer.create({
     data: {
       createdById: admin.id,
@@ -148,6 +196,26 @@ async function main() {
       countryCode: 'FR',
       postalCode: '75008',
       taxNumber: 'IF: 87654321',
+    },
+  });
+
+  const transportCategory = expenseCategories.find((category) => category.name === 'Transport')!;
+  const taxiType = transportCategory.expenseTypes.find((type) => type.name === 'Taxi')!;
+  await prisma.expenseNote.create({
+    data: {
+      categoryId: transportCategory.id,
+      expenseTypeId: taxiType.id,
+      createdById: employeeA.id,
+      expenseDate: daysFromNow(-2),
+      amountTTC: 180,
+      amountHT: 150,
+      vatAmount: 30,
+      vatRate: 20,
+      merchantName: 'Taxi Casablanca',
+      receiptNumber: 'TAXI-2026-001',
+      currency: 'MAD',
+      comment: 'Client meeting transport.',
+      source: ExpenseSource.MANUAL,
     },
   });
 

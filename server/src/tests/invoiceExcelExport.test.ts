@@ -6,9 +6,9 @@ import { sanitizeExcelString } from '@utils/excel';
 async function main() {
   assert.equal(sanitizeExcelString('=SUM(1,1)'), "'=SUM(1,1)");
   assert.equal(sanitizeExcelString('   =SUM(1,1)'), "'   =SUM(1,1)");
-  assert.equal(sanitizeExcelString('   +cmd'), '   +cmd');
-  assert.equal(sanitizeExcelString('-10'), '-10');
-  assert.equal(sanitizeExcelString('@lookup'), '@lookup');
+  assert.equal(sanitizeExcelString('   +cmd'), "'   +cmd");
+  assert.equal(sanitizeExcelString('-10'), "'-10");
+  assert.equal(sanitizeExcelString('@lookup'), "'@lookup");
   assert.equal(sanitizeExcelString('Safe value'), 'Safe value');
 
   const buffer = await renderInvoicesExcelBuffer([
@@ -64,14 +64,14 @@ async function main() {
   assert.ok(worksheet.autoFilter);
   assert.equal(worksheet.getCell('A6').value, "'=INV-TEST");
   assert.equal(worksheet.getCell('E6').value, "'=Client");
-  assert.equal(worksheet.getCell('F6').value, '+Company');
-  assert.equal(worksheet.getCell('H6').value, '   -212600000000');
-  assert.equal(worksheet.getCell('I6').value, '@TAX');
-  assert.equal(worksheet.getCell('S6').value, '-DEV-TEST');
+  assert.equal(worksheet.getCell('F6').value, "'+Company");
+  assert.equal(worksheet.getCell('H6').value, "'   -212600000000");
+  assert.equal(worksheet.getCell('I6').value, "'@TAX");
+  assert.equal(worksheet.getCell('S6').value, "'-DEV-TEST");
   assert.match(String(worksheet.getCell('T6').value), /'=Service/);
-  assert.match(String(worksheet.getCell('T6').value), /@unit/);
+  assert.match(String(worksheet.getCell('T6').value), /'@unit/);
   assert.equal(worksheet.getCell('U6').value, "'   =note");
-  assert.equal(worksheet.getCell('V6').value, '+terms');
+  assert.equal(worksheet.getCell('V6').value, "'+terms");
 
   console.log('invoice excel export tests passed');
 }

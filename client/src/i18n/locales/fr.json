@@ -423,7 +423,7 @@
     "text0382": "Reessayer",
     "text0383": "admin@billingsystem.com",
     "text0384": "Enter your password",
-    "text0385": "Forgot Password?",
+    "text0385": "Mot de passe oublié ?",
     "text0386": "Deconnexion",
     "text0387": "Mot de passe",
     "text0388": "Connexion impossible pour le moment.",
@@ -916,5 +916,284 @@
     "alreadySigned": "Ce devis est deja signe.",
     "notSigned": "Ce devis n est pas signe.",
     "approvedDuplicateCatalog": "Un devis approuve existe deja pour ce client et ce catalogue."
+  },
+  "expenses": {
+    "nav": "Notes de frais",
+    "title": "Notes de frais",
+    "description": "Gerez les recus, l analyse IA et les frais remboursables.",
+    "subtitle": "{{count}} note(s) de frais trouvee(s).",
+    "kpi": {
+      "pending": "En attente",
+      "approved": "Approuvees",
+      "rejected": "Rejetees",
+      "paid": "Payees",
+      "total": "Total"
+    },
+    "filters": {
+      "search": "Rechercher marchand, recu ou commentaire",
+      "allCategories": "Toutes categories",
+      "allTypes": "Tous types",
+      "allSources": "Toutes sources",
+      "allStatuses": "Tous statuts",
+      "allEmployees": "Tous employes",
+      "amountMin": "Montant min",
+      "amountMax": "Montant max",
+      "allCurrencies": "Toutes devises",
+      "receipt": "Recu",
+      "warnings": "Avertissements IA",
+      "hasReceipt": "Avec recu",
+      "noReceipt": "Sans recu",
+      "hasWarnings": "Avec avertissements",
+      "noWarnings": "Sans avertissements",
+      "aiConfidenceMin": "Confiance IA min."
+    },
+    "fields": {
+      "date": "Date",
+      "merchant": "Marchand",
+      "category": "Categorie",
+      "expenseType": "Type de frais",
+      "amountTTC": "Montant TTC",
+      "amountHT": "Montant HT",
+      "vatAmount": "Montant TVA",
+      "vatRate": "Taux TVA",
+      "receiptNumber": "Numero de recu",
+      "receipt": "Recu",
+      "currency": "Devise",
+      "comment": "Commentaire",
+      "source": "Source",
+      "actions": "Actions",
+      "employee": "Employe",
+      "status": "Statut",
+      "activity": "Activite"
+    },
+    "source": {
+      "manual": "Manuel",
+      "ai": "IA"
+    },
+    "activity": {
+      "tooltip": "{{count}} activite(s) dans l historique. Ouvrir le suivi."
+    },
+    "form": {
+      "createTitle": "Creer une note de frais",
+      "editTitle": "Modifier la note de frais",
+      "description": "Verifiez les donnees du recu avant l enregistrement."
+    },
+    "drawer": {
+      "sections": {
+        "extracted": "Donnees extraites",
+        "review": "Verification et soumission",
+        "details": "Details de la depense",
+        "amounts": "Montants et TVA",
+        "verification": "Verification"
+      },
+      "steps": {
+        "receipt": "Recu",
+        "analysis": "Analyse IA",
+        "review": "Verification",
+        "submit": "Soumission"
+      }
+    },
+    "ai": {
+      "upload": "Importer un recu pour analyse IA",
+      "hint": "PDF, PNG, JPG ou JPEG jusqu a 10 Mo",
+      "dragHint": "Deposez le recu ici ou cliquez pour parcourir",
+      "review": "Revue IA",
+      "processing": "Analyse du recu",
+      "status": "Statut IA",
+      "confidence": "Confiance IA",
+      "processingStatus": "Statut du traitement",
+      "extractedFields": "Champs extraits"
+    },
+    "actions": {
+      "create": "Creer",
+      "new": "Nouvelle note de frais",
+      "update": "Modifier",
+      "delete": "Supprimer",
+      "cancel": "Annuler",
+      "add": "Ajouter",
+      "previous": "Precedent",
+      "next": "Suivant",
+      "saveDraft": "Enregistrer brouillon",
+      "submit": "Soumettre",
+      "analyzeSubmit": "Analyser et soumettre",
+      "approve": "Approuver",
+      "reject": "Rejeter",
+      "requestChanges": "Demander correction",
+      "markPaid": "Marquer paye",
+      "confirm": "Confirmer",
+      "downloadReceipt": "Télécharger le reçu",
+      "review": "Revoir",
+      "zoomIn": "Agrandir",
+      "zoomOut": "Reduire",
+      "replaceReceipt": "Remplacer le recu",
+      "analyzeAgain": "Analyser a nouveau",
+      "removeReceipt": "Retirer",
+      "import": "Importer",
+      "newShort": "Nouvelle note",
+      "filters": "Filtres",
+      "previewPdf": "Aperçu PDF",
+      "downloadPdf": "Télécharger PDF",
+      "printPdf": "Imprimer",
+      "sendEmail": "Envoyer par email",
+      "emailHistory": "Historique email",
+      "exportExcel": "Excel",
+      "exportPdf": "PDF",
+      "exportZip": "ZIP"
+    },
+    "messages": {
+      "created": "Note de frais creee avec succes.",
+      "updated": "Note de frais modifiee avec succes.",
+      "deleted": "Note de frais supprimee avec succes.",
+      "saveError": "Impossible d enregistrer la note de frais.",
+      "deleteError": "Impossible de supprimer la note de frais.",
+      "analyzed": "Recu analyse. Veuillez verifier avant l enregistrement.",
+      "manualReview": "L analyse IA necessite une revue manuelle.",
+      "analyzeError": "Impossible d analyser le recu.",
+      "categoryCreated": "Categorie de frais creee.",
+      "categoryError": "Impossible d enregistrer la categorie.",
+      "typeCreated": "Type de frais cree.",
+      "typeError": "Impossible d enregistrer le type.",
+      "submitted": "Note de frais soumise pour revue admin.",
+      "submitError": "Impossible de soumettre la note de frais.",
+      "approved": "Note de frais approuvee.",
+      "approveError": "Impossible d approuver la note de frais.",
+      "rejected": "Note de frais rejetee.",
+      "rejectError": "Impossible de rejeter la note de frais.",
+      "changesRequested": "Corrections demandees a l employe.",
+      "changesError": "Impossible de demander des corrections.",
+      "paid": "Note de frais marquee comme payee.",
+      "paidError": "Impossible de marquer la note comme payee.",
+      "pdfPreviewed": "Aperçu PDF ouvert.",
+      "pdfDownloaded": "PDF téléchargé.",
+      "pdfPrinted": "PDF prêt à imprimer.",
+      "pdfError": "Impossible de générer le PDF.",
+      "emailSent": "Email envoyé.",
+      "emailError": "Impossible d'envoyer l'email.",
+      "exported": "Export généré.",
+      "exportError": "Impossible de générer l’export."
+    },
+    "confirm": {
+      "deleteTitle": "Supprimer la note de frais ?",
+      "deleteDescription": "Cette action est irreversible."
+    },
+    "empty": {
+      "title": "Aucune note de frais pour le moment",
+      "notes": "Aucune note de frais trouvee.",
+      "merchant": "Aucun marchand",
+      "preview": "Aucun aperçu",
+      "noColumnItems": "Aucune note",
+      "noAnalytics": "Aucune donnee analytique."
+    },
+    "pagination": {
+      "page": "Page {{page}} sur {{total}}",
+      "of": "sur"
+    },
+    "manage": {
+      "title": "Categories et types",
+      "categoryName": "Nouvelle categorie",
+      "typeName": "Nouveau type"
+    },
+    "status": {
+      "active": "Actif",
+      "inactive": "Inactif",
+      "workflow": {
+        "DRAFT": "Brouillon",
+        "PROCESSING": "Traitement",
+        "NEEDS_REVIEW": "A revoir",
+        "SUBMITTED": "Soumise",
+        "CHANGES_REQUESTED": "Corrections demandees",
+        "APPROVED": "Approuvee",
+        "REJECTED": "Rejetee",
+        "PAID": "Payee"
+      }
+    },
+    "review": {
+      "title": "Revue admin",
+      "receiptPreview": "Aperçu du reçu",
+      "rejectionReason": "Motif de rejet",
+      "changesReason": "Demande de correction",
+      "rejectPlaceholder": "Ecrire le motif obligatoire du rejet",
+      "changesPlaceholder": "Ecrire les corrections demandees a l employe",
+      "audit": "Historique d audit",
+      "noAudit": "Aucune entree d audit."
+    },
+    "audit": {
+      "CREATED": "Creation",
+      "UPDATED": "Modification",
+      "RECEIPT_UPLOADED": "Recu importe",
+      "AI_ANALYSIS_COMPLETED": "Analyse IA terminee",
+      "AI_ANALYSIS_FAILED": "Analyse IA echouee",
+      "SUBMITTED": "Soumission",
+      "RESUBMITTED": "Resoumission",
+      "APPROVED": "Approbation",
+      "REJECTED": "Rejet",
+      "CHANGES_REQUESTED": "Corrections demandees",
+      "PAID": "Marquee payee",
+      "DELETED": "Suppression"
+    },
+    "verification": {
+      "ready": "Pret",
+      "pending": "En attente",
+      "valid": "Valide",
+      "manualRequired": "Revue manuelle",
+      "missingFields": "{{count}} champ(s) manquant(s)",
+      "noMissingFields": "Aucun champ manquant"
+    },
+    "summary": {
+      "toSubmit": "A soumettre",
+      "waitingApproval": "En attente d approbation",
+      "waitingReimbursement": "En attente de remboursement",
+      "paid": "Payees",
+      "items": "elements"
+    },
+    "bulk": {
+      "selected": "{{count}} selectionnee(s)",
+      "selectAll": "Selectionner toutes les notes"
+    },
+    "email": {
+      "title": "Envoyer la note de frais",
+      "to": "Destinataire",
+      "cc": "CC",
+      "bcc": "BCC",
+      "subject": "Objet",
+      "message": "Message",
+      "attachmentPreview": "Pièce jointe",
+      "defaultSubject": "Note de frais {{reference}}",
+      "defaultMessage": "Bonjour,\n\nVeuillez trouver ci-joint la note de frais.\n\nCordialement,",
+      "historyTitle": "Historique des emails",
+      "noHistory": "Aucun email envoyé pour cette note de frais.",
+      "attachment": "Pièce jointe"
+    },
+    "views": {
+      "list": "Liste",
+      "kanban": "Kanban",
+      "calendar": "Calendrier",
+      "analytics": "Analytics"
+    },
+    "savedFilters": {
+      "save": "Sauvegarder le filtre",
+      "saved": "Filtre sauvegarde.",
+      "namePlaceholder": "Nom du filtre",
+      "nameRequired": "Veuillez saisir un nom de filtre.",
+      "favorite": "Favori",
+      "rename": "Renommer",
+      "renamePrompt": "Nouveau nom du filtre",
+      "deleteTitle": "Supprimer ce filtre ?",
+      "deleteDescription": "Le filtre {{name}} sera supprime de vos presets."
+    },
+    "analytics": {
+      "currentMonth": "Mois courant",
+      "currentQuarter": "Trimestre courant",
+      "currentYear": "Annee courante",
+      "averageExpense": "Depense moyenne",
+      "averageApprovalTime": "Delai moyen d approbation",
+      "vatTotals": "Total TVA",
+      "byMonth": "Depenses par mois",
+      "byCategory": "Depenses par categorie",
+      "byEmployee": "Depenses par employe",
+      "byStatus": "Depenses par statut",
+      "byCurrency": "Depenses par devise",
+      "topMerchants": "Top marchands"
+    }
   }
 }

@@ -115,8 +115,9 @@ export class AuthController {
    * 
    * Clears the httpOnly cookie.
    */
-  async logout(_req: Request, res: Response, next: NextFunction) {
+  async logout(req: Request, res: Response, next: NextFunction) {
     try {
+      await authService.logout(req.user);
       res.clearCookie('accessToken', getClearAccessCookieOptions());
       res.clearCookie('refreshToken', getClearCookieOptions());
       ApiResponse.success(res, null, 'Logged out successfully');

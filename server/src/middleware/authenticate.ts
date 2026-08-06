@@ -4,6 +4,7 @@ import { Role } from '@prisma/client';
 import { env } from '@config/env';
 import { ApiError } from '@utils/ApiError';
 import { prisma } from '@config/database';
+import { attachAuditUser } from './auditContext';
 
 /**
  * JWT Authentication Middleware
@@ -53,7 +54,7 @@ export const authenticate = async (
             id: true,
             name: true,
             permissions: {
-              select: { permission: { select: { key: true } } },
+              select: { scope: true, permission: { select: { key: true } } },
             },
           },
         },
@@ -79,7 +80,11 @@ export const authenticate = async (
       role,
       rbacRoleId: user.rbacRole?.id ?? null,
       permissions: user.rbacRole?.permissions.map(({ permission }) => permission.key) ?? [],
+      permissionScopes: Object.fromEntries(
+        user.rbacRole?.permissions.map(({ permission, scope }) => [permission.key, scope]) ?? []
+      ),
     };
+    attachAuditUser(req);
     next();
   } catch (error) {
     if (error instanceof jwt.TokenExpiredError) {

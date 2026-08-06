@@ -95,7 +95,18 @@ export class RbacService {
     if (new Set(permissionIds).size !== permissionIds.length) throw ApiError.badRequest('Duplicate permissions are not allowed');
     const stored = await prisma.permission.findMany({ where: { id: { in: permissionIds } }, select: { id: true, resource: true } });
     if (stored.length !== permissionIds.length) throw ApiError.badRequest('One or more permissions are invalid');
-    const scopedResources = new Set(['clients', 'invoices', 'payments', 'recurring']);
+    const scopedResources = new Set([
+      'clients',
+      'customers',
+      'invoices',
+      'payments',
+      'recurring',
+      'credit_notes',
+      'contracts',
+      'devis',
+      'expense_notes',
+      'expense_attachments',
+    ]);
     for (const item of permissions) {
       const permission = stored.find((entry) => entry.id === item.permissionId)!;
       if (!scopedResources.has(permission.resource) && item.scope !== PermissionScope.ALL) {

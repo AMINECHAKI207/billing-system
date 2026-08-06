@@ -8,6 +8,10 @@
     "typecheck": "tsc -b",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
+    "i18n:check": "node scripts/audit-i18n.mjs",
+    "i18n:scan": "node scripts/scan-hardcoded-i18n.mjs",
+    "i18n:test": "node scripts/test-i18n-quality.mjs",
+    "test:i18n": "node scripts/audit-i18n.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

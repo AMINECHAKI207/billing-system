@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { Role } from '@prisma/client';
 import { env } from '@config/env';
 import { ApiError } from '@utils/ApiError';
+import { auditService } from '@modules/audit/audit.service';
 import { authRepository } from './auth.repository';
 import { ChangePasswordInput, RegisterInput, LoginInput, UpdateThemeInput } from './auth.schema';
 
@@ -46,32 +47,64 @@ export class AuthService {
    * Authenticate user and return tokens
    */
   async login(data: LoginInput) {
-    // 1. Find user
-    const user = await authRepository.findByEmail(data.email);
-    if (!user) {
-      // Use generic error for security (don't reveal if email exists)
-      throw ApiError.unauthorized('Invalid email or password');
+    try {
+      // 1. Find user
+      const user = await authRepository.findByEmail(data.email);
+      if (!user) {
+        // Use generic error for security (don't reveal if email exists)
+        throw ApiError.unauthorized('Invalid email or password');
+      }
+
+      // 2. Check if active
+      if (!user.isActive) {
+        throw ApiError.forbidden('Account has been deactivated');
+      }
+
+      // 3. Verify password
+      const isValid = await bcrypt.compare(data.password, user.passwordHash);
+      if (!isValid) {
+        throw ApiError.unauthorized('Invalid email or password');
+      }
+
+      // 4. Generate tokens
+      const tokens = this.generateTokens(user);
+
+      // 5. Exclude passwordHash
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { passwordHash: _, ...userWithoutPassword } = user;
+
+      await this.audit({
+        module: 'authentication',
+        entity: 'Session',
+        entityId: user.id,
+        action: 'LOGIN',
+        userId: user.id,
+        success: true,
+        metadata: { email: user.email, role: user.role },
+      });
+
+      return { user: userWithoutPassword, tokens };
+    } catch (error) {
+      await this.audit({
+        module: 'authentication',
+        entity: 'Session',
+        action: 'LOGIN_FAILED',
+        success: false,
+        metadata: { email: data.email },
+      });
+      throw error;
     }
+  }
 
-    // 2. Check if active
-    if (!user.isActive) {
-      throw ApiError.forbidden('Account has been deactivated');
-    }
-
-    // 3. Verify password
-    const isValid = await bcrypt.compare(data.password, user.passwordHash);
-    if (!isValid) {
-      throw ApiError.unauthorized('Invalid email or password');
-    }
-
-    // 4. Generate tokens
-    const tokens = this.generateTokens(user);
-
-    // 5. Exclude passwordHash
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { passwordHash: _, ...userWithoutPassword } = user;
-
-    return { user: userWithoutPassword, tokens };
+  async logout(user?: { id: string }) {
+    if (!user) return;
+    await this.audit({
+      module: 'authentication',
+      entity: 'Session',
+      entityId: user.id,
+      action: 'LOGOUT',
+      userId: user.id,
+    });
   }
 
   /**
@@ -116,6 +149,13 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(data.newPassword, 12);
     await authRepository.updatePassword(user.id, passwordHash);
+    await this.audit({
+      module: 'authentication',
+      entity: 'User',
+      entityId: user.id,
+      action: 'PASSWORD_CHANGED',
+      userId: user.id,
+    });
   }
 
   async updateTheme(userId: string, data: UpdateThemeInput) {
@@ -154,6 +194,10 @@ export class AuthService {
     });
 
     return { accessToken, refreshToken };
+  }
+
+  private async audit(input: Parameters<typeof auditService.logBusinessAction>[0]) {
+    await auditService.logBusinessAction(input).catch(() => undefined);
   }
 }
 

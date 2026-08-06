@@ -2,7 +2,7 @@ import { ApiError } from '@utils/ApiError';
 import { generateInvoiceNumber } from '@utils/invoiceNumber';
 import { parsePagination, parseSort } from '@utils/pagination';
 import { sendEmail } from '@services/email.service';
-import { InvoiceStatus, PermissionScope, Prisma, Role } from '@prisma/client';
+import { CreditNoteStatus, InvoiceStatus, PermissionScope, Prisma, Role } from '@prisma/client';
 import { settingsService } from '@modules/settings/settings.service';
 import { rbacService } from '@modules/rbac/rbac.service';
 import { customerAccessWhere, invoiceAccessWhere } from '@modules/rbac/accessScope';
@@ -127,7 +127,7 @@ export class InvoiceService {
     if (!invoice) {
       throw ApiError.notFound('Invoice');
     }
-    return invoice;
+    return this.withCreditSummary(invoice);
   }
 
   async updateInvoice(id: string, user: { id: string; role: Role }, scope: PermissionScope, data: UpdateInvoiceInput) {
@@ -507,7 +507,46 @@ export class InvoiceService {
     if (dueDate < new Date()) return InvoiceStatus.OVERDUE;
     return requestedStatus;
   }
+
+  private withCreditSummary<T extends CreditSummaryInvoice>(invoice: T) {
+    const activeCreditNotes = (invoice.creditNotes ?? []).filter(
+      (creditNote) =>
+        creditNote.status === CreditNoteStatus.VALIDATED || creditNote.status === CreditNoteStatus.REFUNDED
+    );
+    const originalTotal = Number(invoice.total);
+    const creditedTotal = roundMoney(activeCreditNotes.reduce((sum, creditNote) => sum + Number(creditNote.total), 0));
+    const refundedTotal = roundMoney(activeCreditNotes.reduce((sum, creditNote) => sum + Number(creditNote.refundedAmount), 0));
+    const paidAmount = Number(invoice.amountPaid);
+    const remainingBalance = Math.max(0, roundMoney(Number(invoice.balanceDue) - creditedTotal));
+    const netTotal = Math.max(0, roundMoney(originalTotal - creditedTotal));
+    const refundableAmount = Math.max(0, roundMoney(Math.min(paidAmount, creditedTotal) - refundedTotal));
+    const creditStatus = creditedTotal <= 0 ? 'NONE' : creditedTotal >= originalTotal ? 'FULL' : 'PARTIAL';
+
+    return {
+      ...invoice,
+      creditSummary: {
+        originalTotal,
+        creditedTotal,
+        netTotal,
+        paidAmount,
+        remainingBalance,
+        refundableAmount,
+        creditStatus,
+      },
+    };
+  }
 }
+
+type CreditSummaryInvoice = {
+  total: unknown;
+  amountPaid: unknown;
+  balanceDue: unknown;
+  creditNotes?: Array<{
+    status: CreditNoteStatus;
+    total: unknown;
+    refundedAmount: unknown;
+  }>;
+};
 
 function roundMoney(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;

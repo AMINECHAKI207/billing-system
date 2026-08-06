@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { logger } from './logger';
 import { isDev } from './env';
+import { createAuditExtension } from '@modules/audit/audit.prisma';
 
 /**
  * Prisma Client Singleton
@@ -20,7 +21,7 @@ declare global {
   var __prisma: PrismaClient | undefined;
 }
 
-export const prisma: PrismaClient =
+const basePrisma: PrismaClient =
   global.__prisma ??
   new PrismaClient({
     log: isDev
@@ -32,20 +33,22 @@ export const prisma: PrismaClient =
       : [{ emit: 'event', level: 'error' }],
   });
 
+export const prisma: PrismaClient = basePrisma.$extends(createAuditExtension(basePrisma)) as unknown as PrismaClient;
+
 // In dev, log all SQL queries for debugging
 if (isDev) {
-  prisma.$on('query' as never, (e: { query: string; duration: number }) => {
+  basePrisma.$on('query' as never, (e: { query: string; duration: number }) => {
     logger.debug(`Prisma Query [${e.duration}ms]`, { query: e.query });
   });
 }
 
-prisma.$on('error' as never, (e: { message: string }) => {
+basePrisma.$on('error' as never, (e: { message: string }) => {
   logger.error('Prisma Error', { message: e.message });
 });
 
 // Store on global to survive hot-reload in development
 if (isDev) {
-  global.__prisma = prisma;
+  global.__prisma = basePrisma;
 }
 
 let databaseConnected = false;
@@ -63,7 +66,7 @@ export function isDatabaseConnected(): boolean {
  * This ensures all in-flight queries complete before shutdown.
  */
 export async function disconnectDatabase(): Promise<void> {
-  await prisma.$disconnect();
+  await basePrisma.$disconnect();
   setDatabaseConnected(false);
   logger.info('Database disconnected gracefully');
 }

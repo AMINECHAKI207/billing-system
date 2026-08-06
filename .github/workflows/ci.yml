@@ -66,5 +66,14 @@ jobs:
       - name: Apply migrations
         run: npm run db:migrate:prod --workspace=server
 
+      - name: Check locale synchronization
+        run: npm run i18n:check
+
+      - name: Scan hardcoded frontend text
+        run: npm run i18n:scan
+
+      - name: Run i18n quality self-tests
+        run: npm run i18n:test
+
       - name: Run production checks
         run: npm run check

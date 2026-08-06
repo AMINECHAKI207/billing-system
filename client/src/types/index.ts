@@ -19,6 +19,18 @@ export type InvoiceStatus =
   | 'CANCELLED';
 
 export type DevisStatus = 'DRAFT' | 'SENT' | 'APPROVED' | 'REJECTED' | 'EXPIRED' | 'CONVERTED';
+export type CreditNoteStatus = 'DRAFT' | 'VALIDATED' | 'CANCELLED' | 'REFUNDED';
+export type CreditNoteType = 'PARTIAL' | 'FULL';
+export type CreditNoteRefundStatus = 'NOT_REFUNDED' | 'PARTIALLY_REFUNDED' | 'REFUNDED';
+export type ContractStatus = 'DRAFT' | 'SENT' | 'VIEWED' | 'SIGNED' | 'ACTIVE' | 'EXPIRED' | 'TERMINATED' | 'CANCELLED';
+export type ContractRenewalType = 'NONE' | 'MANUAL' | 'AUTOMATIC';
+export type ContractSignatureStatus = 'NOT_STARTED' | 'COMPANY_PENDING' | 'COMPANY_SIGNED' | 'CLIENT_PENDING' | 'CLIENT_SIGNED' | 'COMPLETED' | 'REVOKED';
+export type ContractPricingType = 'FIXED' | 'HOURLY' | 'DAILY' | 'MONTHLY' | 'MONTHLY_SUBSCRIPTION' | 'ANNUAL_SUBSCRIPTION' | 'MILESTONE' | 'CUSTOM';
+export type ContractBillingFrequency = 'ONE_TIME' | 'WEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'SEMIANNUAL' | 'ANNUAL' | 'CUSTOM';
+export type ContractProrationPolicy = 'NONE' | 'ACTUAL_DAYS' | 'FIXED_30_DAYS';
+export type ContractTimeEntryStatus = 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'REJECTED' | 'INVOICED' | 'LOCKED';
+export type ContractMilestoneStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'APPROVED' | 'INVOICED' | 'CANCELLED';
+export type ContractBillingScheduleStatus = 'PENDING' | 'APPROVED' | 'INVOICED' | 'CANCELLED';
 
 export type PaymentMethod =
   | 'CASH'
@@ -163,6 +175,202 @@ export interface Product {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CreditNoteLine {
+  id: string;
+  creditNoteId: string;
+  invoiceItemId?: string | null;
+  description: string;
+  unit?: string | null;
+  quantity: number;
+  unitPrice: number;
+  taxRate: number;
+  lineTotal: number;
+  sortOrder: number;
+}
+
+export interface CreditNote {
+  id: string;
+  creditNoteNumber: string;
+  invoiceId: string;
+  customerId: string;
+  createdById: string;
+  status: CreditNoteStatus;
+  type: CreditNoteType;
+  issueDate: string;
+  reasonId: string;
+  reasonCodeSnapshot: string;
+  reasonNameSnapshot: Record<string, string>;
+  reason: string;
+  internalComment?: string | null;
+  subtotal: number;
+  taxAmount: number;
+  total: number;
+  currency: string;
+  refundedAmount: number;
+  refundStatus: CreditNoteRefundStatus;
+  validatedAt?: string | null;
+  cancelledAt?: string | null;
+  refundedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  invoice: Pick<Invoice, 'id' | 'invoiceNumber' | 'status' | 'total' | 'amountPaid' | 'balanceDue' | 'currency' | 'issueDate' | 'dueDate'>;
+  reasonRef?: CreditNoteReason;
+  customer: Pick<Customer, 'id' | 'name' | 'email' | 'phone' | 'company' | 'taxNumber' | 'country' | 'countryCode'>;
+  createdBy?: Pick<User, 'id' | 'name' | 'email'>;
+  validatedBy?: Pick<User, 'id' | 'name' | 'email'> | null;
+  cancelledBy?: Pick<User, 'id' | 'name' | 'email'> | null;
+  refundedBy?: Pick<User, 'id' | 'name' | 'email'> | null;
+  lines?: CreditNoteLine[];
+  invoiceCreditSummary?: {
+    originalTotal: number;
+    creditTotal: number;
+    netTotal: number;
+    paidAmount: number;
+    remainingBalance: number;
+    refundableAmount: number;
+  };
+}
+
+export interface CreditNoteReason {
+  id: string;
+  code: string;
+  nameFr: string;
+  nameEn: string;
+  nameAr: string;
+  description?: string | null;
+  category: string;
+  isActive: boolean;
+  isSystem: boolean;
+  requiresComment: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+  _count?: { creditNotes: number };
+}
+
+export interface ContractVersion {
+  id: string;
+  contractId: string;
+  versionNumber: number;
+  title: string;
+  content: string;
+  structuredData?: Record<string, unknown> | null;
+  signatureStatus: ContractSignatureStatus;
+  isSigned: boolean;
+  contentHash: string;
+  companySignatureUrl?: string | null;
+  companyStampUrl?: string | null;
+  companySignedById?: string | null;
+  companySignedAt?: string | null;
+  clientSignerName?: string | null;
+  clientSignerEmail?: string | null;
+  clientSignedAt?: string | null;
+  signedPdfHash?: string | null;
+  signedPdfStorageKey?: string | null;
+  revokedAt?: string | null;
+  revokedById?: string | null;
+  revocationReason?: string | null;
+  revocationNote?: string | null;
+  previousPdfHash?: string | null;
+  createdById: string;
+  createdAt: string;
+}
+
+export interface ContractTemplate {
+  id: string;
+  code: string;
+  nameFr: string;
+  nameEn: string;
+  nameAr: string;
+  description?: string | null;
+  content: string;
+  isActive: boolean;
+  isSystem: boolean;
+  sortOrder: number;
+}
+
+export interface Contract {
+  id: string;
+  contractNumber: string;
+  clientId: string;
+  createdById: string;
+  status: ContractStatus;
+  title: string;
+  contractType: string;
+  language: 'fr' | 'en' | 'ar';
+  startDate?: string | null;
+  endDate?: string | null;
+  renewalType: ContractRenewalType;
+  renewalNoticeDays?: number | null;
+  amount?: number | null;
+  currency: string;
+  pricingType: ContractPricingType;
+  unitRate?: number | null;
+  estimatedQuantity?: number | null;
+  fixedAmount?: number | null;
+  billingFrequency: ContractBillingFrequency;
+  billingDay?: number | null;
+  billingStartDate?: string | null;
+  billingEndDate?: string | null;
+  minimumBillableUnits?: number | null;
+  includedUnits?: number | null;
+  overtimeRate?: number | null;
+  taxRate: number;
+  paymentTermsDays: number;
+  autoInvoiceEnabled: boolean;
+  nextInvoiceDate?: string | null;
+  lastInvoiceDate?: string | null;
+  prorationPolicy: ContractProrationPolicy;
+  billingDescription?: string | null;
+  summary?: string | null;
+  terms?: string | null;
+  pdfHash?: string | null;
+  sentAt?: string | null;
+  viewedAt?: string | null;
+  signedAt?: string | null;
+  activatedAt?: string | null;
+  expiredAt?: string | null;
+  terminatedAt?: string | null;
+  cancelledAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  client: Pick<Customer, 'id' | 'name' | 'email' | 'company' | 'country' | 'countryCode'>;
+  createdBy?: Pick<User, 'id' | 'name' | 'email'>;
+  currentVersion?: ContractVersion | null;
+  signedVersion?: ContractVersion | null;
+  versions?: ContractVersion[];
+  invoices?: Array<{ id: string; invoiceNumber: string; total: number; status: InvoiceStatus; issueDate: string; billingPeriodStart?: string | null; billingPeriodEnd?: string | null }>;
+  timeEntries?: Array<{
+    id: string;
+    workDate: string;
+    startTime?: string | null;
+    endTime?: string | null;
+    breakMinutes?: number;
+    durationMinutes?: number;
+    billableMinutes?: number;
+    quantity: number;
+    activityType?: string | null;
+    description: string;
+    internalNote?: string | null;
+    billable: boolean;
+    status: ContractTimeEntryStatus;
+    appliedRate?: number | null;
+    currency?: string | null;
+    calculatedAmount?: number | null;
+    rejectionReason?: string | null;
+    submittedAt?: string | null;
+    approvedAt?: string | null;
+    rejectedAt?: string | null;
+    invoiceId?: string | null;
+    user?: Pick<User, 'id' | 'name' | 'email'>;
+  }>;
+  milestones?: Array<{ id: string; title: string; dueDate?: string | null; amount?: number | null; percentage?: number | null; status: ContractMilestoneStatus; invoiceId?: string | null; sortOrder: number }>;
+  billingScheduleItems?: Array<{ id: string; label: string; dueDate: string; amount: number; status: ContractBillingScheduleStatus; invoiceId?: string | null; sortOrder: number }>;
+  auditLogs?: Array<{ id: string; action: string; createdAt: string; actor?: Pick<User, 'id' | 'name' | 'email'> | null }>;
+  emailLogs?: Array<{ id: string; recipientEmail: string; subject: string; status: string; createdAt: string }>;
+  _count?: { versions: number; emailLogs: number; invoices?: number; timeEntries?: number; milestones?: number };
 }
 
 export interface ExpenseCategory {
@@ -426,6 +634,16 @@ export interface Invoice {
   reminders?: Reminder[];
   emailLogs?: InvoiceEmailLog[];
   sourceDevis?: Pick<Devis, 'id' | 'devisNumber' | 'status'>;
+  creditNotes?: Array<Pick<CreditNote, 'id' | 'creditNoteNumber' | 'status' | 'issueDate' | 'total' | 'currency' | 'refundedAmount' | 'refundStatus' | 'validatedAt'>>;
+  creditSummary?: {
+    originalTotal: number;
+    creditedTotal: number;
+    netTotal: number;
+    paidAmount: number;
+    remainingBalance: number;
+    refundableAmount: number;
+    creditStatus: 'NONE' | 'PARTIAL' | 'FULL';
+  };
 }
 
 export interface Devis {
@@ -609,6 +827,48 @@ export interface RbacUser {
   rbacRole?: { id: string; name: string } | null;
 }
 
+export interface AuditLog {
+  id: string;
+  userId?: string | null;
+  module: string;
+  entity: string;
+  entityId?: string | null;
+  action: string;
+  oldValues?: Record<string, unknown> | null;
+  newValues?: Record<string, unknown> | null;
+  metadata?: Record<string, unknown> | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  browser?: string | null;
+  operatingSystem?: string | null;
+  device?: string | null;
+  requestId?: string | null;
+  sessionId?: string | null;
+  httpMethod?: string | null;
+  route?: string | null;
+  statusCode?: number | null;
+  success: boolean;
+  executionTime?: number | null;
+  createdAt: string;
+  user?: Pick<User, 'id' | 'name' | 'email' | 'role'> | null;
+}
+
+export interface AuditLogFilters {
+  page?: number;
+  limit?: number;
+  search?: string;
+  userId?: string;
+  module?: string;
+  entity?: string;
+  entityId?: string;
+  action?: string;
+  success?: 'true' | 'false';
+  startDate?: string;
+  endDate?: string;
+  sortBy?: 'createdAt' | 'module' | 'entity' | 'action' | 'success';
+  sortOrder?: 'asc' | 'desc';
+}
+
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 export type DashboardPeriod = 'this_month' | 'last_3_months' | 'last_6_months' | 'this_year' | 'custom';
@@ -757,6 +1017,26 @@ export interface DevisItemForm extends InvoiceItemForm {
   discount: number;
 }
 
+export interface CreditNoteLineForm {
+  invoiceItemId?: string | null;
+  description: string;
+  unit?: string | null;
+  quantity: number;
+  unitPrice: number;
+  taxRate?: number;
+}
+
+export interface CreateCreditNoteForm {
+  invoiceId: string;
+  type: CreditNoteType;
+  issueDate: string;
+  reasonId: string;
+  reason?: string | null;
+  internalComment?: string | null;
+  lines?: CreditNoteLineForm[];
+  amountTTC?: number;
+}
+
 export interface CreateInvoiceForm {
   customerId: string;
   status?: InvoiceStatus;
@@ -784,6 +1064,43 @@ export interface CreateDevisForm {
   currency: string;
   items: DevisItemForm[];
 }
+
+export interface CreateContractForm {
+  clientId: string;
+  templateId?: string | null;
+  title: string;
+  contractType: string;
+  language: 'fr' | 'en' | 'ar';
+  startDate?: string | null;
+  endDate?: string | null;
+  renewalType: ContractRenewalType;
+  renewalNoticeDays?: number | null;
+  amount?: number | null;
+  currency: string;
+  pricingType?: ContractPricingType;
+  unitRate?: number | null;
+  estimatedQuantity?: number | null;
+  fixedAmount?: number | null;
+  billingFrequency?: ContractBillingFrequency;
+  billingDay?: number | null;
+  billingStartDate?: string | null;
+  billingEndDate?: string | null;
+  minimumBillableUnits?: number | null;
+  includedUnits?: number | null;
+  overtimeRate?: number | null;
+  taxRate?: number;
+  paymentTermsDays?: number;
+  autoInvoiceEnabled?: boolean;
+  nextInvoiceDate?: string | null;
+  lastInvoiceDate?: string | null;
+  prorationPolicy?: ContractProrationPolicy;
+  billingDescription?: string | null;
+  summary?: string | null;
+  terms?: string | null;
+  content?: string;
+}
+
+export type UpdateContractForm = Partial<Omit<CreateContractForm, 'clientId'>>;
 
 export interface CreateCustomerForm {
   name: string;
@@ -843,6 +1160,31 @@ export interface DevisFilters {
   search?: string;
   status?: DevisStatus;
   customerId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}
+
+export interface CreditNoteFilters {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: CreditNoteStatus;
+  invoiceId?: string;
+  customerId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}
+
+export interface ContractFilters {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: ContractStatus;
+  clientId?: string;
   dateFrom?: string;
   dateTo?: string;
   sortBy?: string;

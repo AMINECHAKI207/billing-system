@@ -1,19 +1,24 @@
 import { AlertTriangle, Bell, CalendarClock, CheckCircle2, Crop, Download, Eraser, Eye, EyeOff, FilePlus2, Loader2, Lock, LogIn, LogOut, Mail, Menu, Moon, Move, PanelLeftClose, PanelLeftOpen, PenLine, Plus, Printer, Redo2, RefreshCcw, RotateCw, Trash2, ReceiptText, Search, Settings, ShieldCheck, Stamp, Sun, Undo2, Unlock, Upload, Users, WalletCards, ZoomIn, ZoomOut, } from 'lucide-react';
 import { LanguageSwitcher } from './components/LanguageSwitcher';
+import { ContractsView } from './components/contracts/ContractsView';
+import { CreditNotesView } from './components/credit-notes/CreditNotesView';
 import { ExpenseNotesView } from './components/expenses/ExpenseNotesView';
+import { AuditLogsView } from './components/audit/AuditLogsView';
+import { AiAdminAssistant } from './components/ai-assistant/AiAdminAssistant';
 import i18n from './i18n';
 
 const t = i18n.t.bind(i18n);
 import { useTranslation } from 'react-i18next';
-import { useCallback, useEffect, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent, type ReactNode, } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent, type ReactNode, } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bar, BarChart, Cell, CartesianGrid, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis, } from 'recharts';
 import { useConfirm } from '@/hooks/useConfirm';
 import { useToast } from '@/hooks/useToast';
 import { formatCurrency, getDaysUntilDue } from '@/lib/utils';
 import { getInitialTheme, getStoredTheme, isThemePreference, persistTheme } from '@/lib/theme';
-import { approveDevis, cancelDevisSignature, cancelInvoiceSignature, changePassword, convertDevisToInvoice, createDevis, createInvoice, createCustomer, createProduct, createUser, createReminder, deleteCompanySignature, deleteCompanyStamp, deleteCustomer, deleteDevis, deleteDraftDevis, downloadDevisPdf, downloadInvoicePdf, downloadInvoicesExcel, getCompanySettings, getCustomers, getCustomerById, getCurrentUser, getDevis, getDevisById, getEmailDeliveryStatus, getInvoiceById, getInvoiceDashboard, getInvoices, getPayments, getRecurringPlans, getProducts, getReceivablesAgingReport, getRecentEmailLogs, getReminders, getTaxSummaryReport, getUsers, getRbacPermissions, getRbacRoles, getRbacUsers, assignRbacPermissions, assignRbacUserRole, getRbacUserClients, assignRbacUserClients, createRbacPermission, createRbacRole, deleteRbacRole, clearAuthSession, login, logout, recordPayment, createRecurringPlan, updateRecurringPlanStatus, runRecurringPlan, removeCompanyAssetBackgroundPreview, rejectDevis, runAutomaticReminders, sendDevis, sendInvoiceEmail, sendTestEmail, signDevis, signInvoice, printInvoicePdf, refreshAccessToken, updateCustomer, updateDevis, updateInvoice, updateCompanySettings, updateThemePreference, updateInvoiceStatus, updateProduct, updateUser, uploadCompanySignature, uploadCompanyStamp, } from '@/lib/api';
-import type { CompanySettings, CreateDevisForm, CreateProductForm, CreateUserForm, Customer, CreateInvoiceForm, DashboardPeriod, DashboardStats, Devis, DevisItemForm, DevisStatus, Invoice, InvoiceItemForm, InvoiceStatus, PaymentMethod, Reminder, ReminderStatus, ReminderType, RecurringFrequency, RecurringPlanStatus, ThemePreference, UpdateCompanySettingsForm, UpdateProductForm, UpdateUserForm, User, UserRole, } from '@/types';
+import { approveDevis, cancelDevisSignature, cancelInvoiceSignature, changePassword, convertDevisToInvoice, createDevis, createInvoice, createCustomer, createProduct, createUser, createReminder, deleteCompanySignature, deleteCompanyStamp, deleteCustomer, deleteDevis, deleteDraftDevis, downloadDevisPdf, downloadInvoicePdf, downloadInvoicesExcel, getCompanySettings, getCustomers, getCustomerById, getCurrentUser, getDevis, getDevisById, getEmailDeliveryStatus, getInvoiceById, getInvoiceDashboard, getInvoices, getPayments, getPublicContract, getRecurringPlans, getProducts, getReceivablesAgingReport, getRecentEmailLogs, getReminders, getTaxSummaryReport, getUsers, getRbacPermissions, getRbacRoles, getRbacUsers, assignRbacPermissions, assignRbacUserRole, getRbacUserClients, assignRbacUserClients, createRbacPermission, createRbacRole, deleteRbacRole, clearAuthSession, login, logout, recordPayment, createRecurringPlan, updateRecurringPlanStatus, runRecurringPlan, removeCompanyAssetBackgroundPreview, rejectDevis, runAutomaticReminders, sendDevis, sendInvoiceEmail, sendTestEmail, signDevis, signInvoice, signPublicContract, printInvoicePdf, refreshAccessToken, updateCustomer, updateDevis, updateInvoice, updateCompanySettings, updateThemePreference, updateInvoiceStatus, updateProduct, updateUser, uploadCompanySignature, uploadCompanyStamp, } from '@/lib/api';
+import type { AiAssistantContext } from '@/lib/api';
+import type { CompanySettings, CreateDevisForm, CreateProductForm, CreateUserForm, Customer, CreateInvoiceForm, CreditNoteStatus, DashboardPeriod, DashboardStats, Devis, DevisItemForm, DevisStatus, Invoice, InvoiceItemForm, InvoiceStatus, PaymentMethod, Reminder, ReminderStatus, ReminderType, RecurringFrequency, RecurringPlanStatus, ThemePreference, UpdateCompanySettingsForm, UpdateProductForm, UpdateUserForm, User, UserRole, } from '@/types';
 type InvoiceSummary = {
     id: string;
     number: string;
@@ -38,7 +43,7 @@ type CompanyAssetDraft = {
     fileName: string;
     previewUrl: string;
 };
-type ViewKey = 'dashboard' | 'clients' | 'invoices' | 'devis' | 'payments' | 'reports' | 'reminders' | 'expenses' | 'products' | 'users' | 'rbac' | 'settings';
+type ViewKey = 'dashboard' | 'clients' | 'invoices' | 'devis' | 'credit-notes' | 'contracts' | 'payments' | 'reports' | 'reminders' | 'expenses' | 'products' | 'users' | 'rbac' | 'audit-logs' | 'settings';
 type InvoiceSortField = 'createdAt' | 'issueDate' | 'dueDate' | 'total' | 'balanceDue' | 'invoiceNumber';
 type DevisSortField = 'createdAt' | 'issueDate' | 'validUntil' | 'total' | 'devisNumber';
 type CustomerSortField = 'createdAt' | 'name' | 'company' | 'email';
@@ -103,6 +108,12 @@ const devisStatusClasses: Record<DevisStatus, string> = {
     EXPIRED: 'bg-amber-100 text-amber-700 ring-amber-200',
     CONVERTED: 'bg-violet-100 text-violet-700 ring-violet-200',
 };
+const creditNoteStatusClasses: Record<CreditNoteStatus, string> = {
+    DRAFT: 'bg-slate-100 text-slate-700 ring-slate-200',
+    VALIDATED: 'bg-emerald-100 text-emerald-700 ring-emerald-200',
+    CANCELLED: 'bg-rose-100 text-rose-700 ring-rose-200',
+    REFUNDED: 'bg-violet-100 text-violet-700 ring-violet-200',
+};
 const statusChartColors: Record<InvoiceStatus, string> = {
     DRAFT: '#64748B',
     SENT: '#2563EB',
@@ -132,6 +143,8 @@ const navItems: Array<{
     { key: 'clients', label: "app.text0007", icon: Users },
     { key: 'invoices', label: "app.text0008", icon: WalletCards },
     { key: 'devis', label: "devis.nav", icon: ReceiptText },
+    { key: 'credit-notes', label: "creditNotes.nav", icon: Undo2 },
+    { key: 'contracts', label: "contracts.nav", icon: FilePlus2 },
     { key: 'payments', label: "app.text0009", icon: CheckCircle2 },
     { key: 'reports', label: "app.text0010", icon: AlertTriangle },
     { key: 'reminders', label: "app.text0011", icon: Bell },
@@ -139,6 +152,7 @@ const navItems: Array<{
     { key: 'products', label: "app.text0012", icon: ReceiptText },
     { key: 'users', label: "app.text0013", icon: Users },
     { key: 'rbac', label: "app.text0014", icon: ShieldCheck },
+    { key: 'audit-logs', label: "auditLogs.nav", icon: ShieldCheck },
     { key: 'settings', label: "app.text0015", icon: Settings },
 ];
 const viewMeta: Record<ViewKey, {
@@ -160,6 +174,14 @@ const viewMeta: Record<ViewKey, {
     devis: {
         title: "devis.title",
         description: "devis.description",
+    },
+    'credit-notes': {
+        title: "creditNotes.title",
+        description: "creditNotes.description",
+    },
+    contracts: {
+        title: "contracts.title",
+        description: "contracts.description",
     },
     payments: {
         title: "app.text0009",
@@ -189,6 +211,10 @@ const viewMeta: Record<ViewKey, {
         title: "app.text0014",
         description: "app.text0025",
     },
+    'audit-logs': {
+        title: "auditLogs.title",
+        description: "auditLogs.description",
+    },
     settings: {
         title: "app.text0015",
         description: "app.text0026",
@@ -199,6 +225,8 @@ const viewPaths: Record<ViewKey, string> = {
     clients: '/clients',
     invoices: '/invoices',
     devis: '/devis',
+    'credit-notes': '/credit-notes',
+    contracts: '/contracts',
     payments: '/payments',
     reports: '/reports',
     reminders: '/reminders',
@@ -206,6 +234,7 @@ const viewPaths: Record<ViewKey, string> = {
     products: '/catalogue',
     users: '/users',
     rbac: '/rbac',
+    'audit-logs': '/audit-logs',
     settings: '/settings',
 };
 const pathViews = Object.entries(viewPaths).reduce<Record<string, ViewKey>>((acc, [view, path]) => {
@@ -291,6 +320,7 @@ function App() {
     const [viewInvoiceId, setViewInvoiceId] = useState('');
     const [viewDevisId, setViewDevisId] = useState('');
     const [viewCustomerId, setViewCustomerId] = useState('');
+    const [contractAiContext, setContractAiContext] = useState<AiAssistantContext | undefined>();
     const [emailInvoiceId, setEmailInvoiceId] = useState('');
     const [invoiceEmailRecipient, setInvoiceEmailRecipient] = useState('');
     const [invoiceEmailSubject, setInvoiceEmailSubject] = useState('');
@@ -1203,6 +1233,8 @@ function App() {
     useEffect(() => {
         if (isAuthBootstrapping)
             return;
+        if (currentPath.startsWith('/contracts/sign/'))
+            return;
         if (!hasAccessToken) {
             if (currentPath !== '/login') {
                 navigateAppTo('/login', true);
@@ -1350,6 +1382,23 @@ function App() {
     const selectedBalance = selectedInvoice ? selectedInvoice.total - selectedInvoice.paid : 0;
     const activeViewMeta = viewMeta[activeView];
     const selectedCustomer = customerDetailQuery.data ?? customerQuery.data?.data.find((customer) => customer.id === viewCustomerId);
+    const aiAssistantContext = useMemo<AiAssistantContext | undefined>(() => {
+        if (viewInvoiceId && invoiceDetailQuery.data) {
+            return {
+                entityType: 'invoice',
+                entityId: invoiceDetailQuery.data.id,
+                readableReference: `${invoiceDetailQuery.data.invoiceNumber} - ${invoiceDetailQuery.data.customer?.company ?? invoiceDetailQuery.data.customer?.name ?? ''}`.trim(),
+            };
+        }
+        if (viewCustomerId && selectedCustomer) {
+            return {
+                entityType: 'client',
+                entityId: selectedCustomer.id,
+                readableReference: selectedCustomer.company ?? selectedCustomer.name,
+            };
+        }
+        return contractAiContext;
+    }, [contractAiContext, invoiceDetailQuery.data, selectedCustomer, viewCustomerId, viewInvoiceId]);
     const userPermissions = currentUserQuery.data?.permissions ?? EMPTY_PERMISSIONS;
     const hasPermission = (permission: string) => userPermissions.includes(permission);
     const isAdmin = hasPermission('roles.view') && hasPermission('permissions.assign');
@@ -1368,6 +1417,8 @@ function App() {
             return hasPermission('users.view');
         if (item.key === 'rbac')
             return hasPermission('roles.view') || hasPermission('permissions.view');
+        if (item.key === 'audit-logs')
+            return hasPermission('audit_logs.view');
         if (item.key === 'dashboard')
             return hasPermission('dashboard.view');
         if (item.key === 'clients')
@@ -1376,6 +1427,10 @@ function App() {
             return hasPermission('invoices.view');
         if (item.key === 'devis')
             return hasPermission('devis.view');
+        if (item.key === 'credit-notes')
+            return hasPermission('credit_notes.view');
+        if (item.key === 'contracts')
+            return hasPermission('contracts.view');
         if (item.key === 'payments')
             return hasPermission('payments.view');
         if (item.key === 'reports')
@@ -1410,7 +1465,8 @@ function App() {
         const cannotAccessAdminView = (activeView === 'users' && !userPermissions.includes('users.view')) ||
             (activeView === 'rbac' &&
                 !userPermissions.includes('roles.view') &&
-                !userPermissions.includes('permissions.view'));
+                !userPermissions.includes('permissions.view')) ||
+            (activeView === 'audit-logs' && !userPermissions.includes('audit_logs.view'));
         if (currentUserQuery.data && cannotAccessAdminView) {
             setActiveView('dashboard');
             setActionMessage(t("app.text0060"));
@@ -1500,12 +1556,14 @@ function App() {
             clients: 'clients.view',
             invoices: 'invoices.view',
             devis: 'devis.view',
+            'credit-notes': 'credit_notes.view',
             payments: 'payments.view',
             reports: 'reports.view',
             reminders: 'reminders.view',
             expenses: 'expense_notes.view',
             products: 'products.view',
             users: 'users.view',
+            'audit-logs': 'audit_logs.view',
             settings: 'settings.view',
         };
         if (permissionByView[view] && !hasPermission(permissionByView[view]!)) {
@@ -2621,6 +2679,9 @@ function App() {
         (loginMutation.isError
             ? getApiErrorMessage(loginMutation.error, t("audit.text0022"))
             : '');
+    if (currentPath.startsWith('/contracts/sign/')) {
+        return <PublicContractSignaturePage token={decodeURIComponent(currentPath.replace('/contracts/sign/', ''))}/>;
+    }
     if (isAuthBootstrapping || (hasAccessToken && currentUserQuery.isLoading)) {
         return <AuthLoadingScreen themePreference={themePreference}/>;
     }
@@ -2641,7 +2702,7 @@ function App() {
       </datalist>
       {isMobileSidebarOpen ? (<button aria-label={t("app.text0124")} className="sidebar-overlay fixed inset-0 z-40 bg-slate-950/55 lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} type="button"/>) : null}
 
-      <aside aria-label={t("app.text0125")} className={`app-sidebar fixed inset-y-0 z-50 border-slate-200 px-3 py-5 lg:z-20 lg:block ${isRTL ? 'right-0 border-l' : 'left-0 border-r'} ${isMobileSidebarOpen ? 'app-sidebar-mobile-open' : 'app-sidebar-mobile-closed'} ${isSidebarExpanded ? 'app-sidebar-expanded' : 'app-sidebar-collapsed'}`} onMouseEnter={() => {
+      <aside aria-label={t("app.text0125")} className={`app-sidebar fixed inset-y-0 z-50 flex flex-col border-slate-200 px-3 py-5 lg:z-20 lg:flex ${isRTL ? 'right-0 border-l' : 'left-0 border-r'} ${isMobileSidebarOpen ? 'app-sidebar-mobile-open' : 'app-sidebar-mobile-closed'} ${isSidebarExpanded ? 'app-sidebar-expanded' : 'app-sidebar-collapsed'}`} onMouseEnter={() => {
             if (isSidebarCollapsed)
                 setIsSidebarHovered(true);
         }} onMouseLeave={() => setIsSidebarHovered(false)}>
@@ -2656,7 +2717,7 @@ function App() {
           </button>
         </div>
 
-        <nav aria-label={t("app.text0129")} className="nav-menu mt-8 space-y-1 text-sm">
+        <nav aria-label={t("app.text0129")} className="nav-menu mt-8 min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain pr-1 text-sm">
           {visibleNavItems.map(({ key, label: labelKey, icon: Icon }) => (<button aria-label={t(labelKey)} className={`nav-item sidebar-nav-item flex h-10 w-full items-center rounded-md font-medium transition ${isRTL ? 'text-right' : 'text-left'} ${isSidebarExpanded ? 'gap-3 px-3' : 'justify-center px-2'} ${activeView === key
                 ? 'nav-item-active bg-slate-900 text-white'
                 : 'text-slate-700 hover:bg-slate-100'}`} data-tooltip={t(labelKey)} key={key} onClick={() => handleViewChange(key)} title={t(labelKey)} type="button">
@@ -2757,7 +2818,7 @@ function App() {
         }} onPasswordChange={setPassword} password={password} user={currentUserQuery.data}/>
                 </div>
               </div>
-              {activeView !== 'expenses' ? (<button className="primary-action inline-flex h-9 shrink-0 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-white shadow-sm transition hover:bg-primary/90" onClick={activeView === 'devis' ? handleOpenDevisForm : handleOpenInvoiceForm} type="button">
+              {activeView !== 'expenses' && activeView !== 'credit-notes' ? (<button className="primary-action inline-flex h-9 shrink-0 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-white shadow-sm transition hover:bg-primary/90" onClick={activeView === 'devis' ? handleOpenDevisForm : handleOpenInvoiceForm} type="button">
                 <FilePlus2 className="h-4 w-4"/>
                 <span className="hidden sm:inline">{activeView === 'devis' ? t('devis.create') : t("app.text0136")}</span>
               </button>) : null}
@@ -4049,6 +4110,9 @@ function App() {
             </section>) : null}
 
           {activeView === 'expenses' ? (<ExpenseNotesView getApiErrorMessage={getApiErrorMessage} hasPermission={hasPermission}/>) : null}
+          {activeView === 'credit-notes' ? (<CreditNotesView getApiErrorMessage={getApiErrorMessage} hasPermission={hasPermission} onOpenInvoice={setViewInvoiceId}/>) : null}
+          {activeView === 'contracts' ? (<ContractsView getApiErrorMessage={getApiErrorMessage} hasPermission={hasPermission} onAiContextChange={setContractAiContext} onOpenInvoice={setViewInvoiceId}/>) : null}
+          {activeView === 'audit-logs' ? (<AuditLogsView getApiErrorMessage={getApiErrorMessage}/>) : null}
 
           {activeView === 'products' ? (<section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
               <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -4480,7 +4544,10 @@ function App() {
         </div>
       </section>
       {viewDevisId ? (<DevisDetailPanel canDeleteDevis={hasPermission('devis.delete')} canSignDevis={hasPermission('devis.sign')} canUpdateDevis={hasPermission('devis.update')} devis={devisDetailQuery.data} isLoading={devisDetailQuery.isLoading} isActionPending={devisActionMutation.isPending} onApprove={(devis) => devisActionMutation.mutate({ devisId: devis.id, action: 'approve' })} onCancelSignature={(devis) => handleConfirmedDevisAction(devis, 'cancelSignature')} onClose={() => setViewDevisId('')} onConvert={(devis) => handleConfirmedDevisAction(devis, 'convert')} onDelete={(devis) => handleConfirmedDevisAction(devis, 'delete')} onDownload={(devis) => downloadDevisPdf(devis.id, devis.devisNumber)} onEdit={handleEditDevis} onOpenInvoice={(invoiceId) => setViewInvoiceId(invoiceId)} onReject={(devis) => handleConfirmedDevisAction(devis, 'reject')} onSend={(devis) => devisActionMutation.mutate({ devisId: devis.id, action: 'send' })} onSign={(devis) => handleConfirmedDevisAction(devis, 'sign')}/>) : null}
-      {viewInvoiceId ? (<InvoiceDetailPanel invoice={invoiceDetailQuery.data} isLoading={invoiceDetailQuery.isLoading} canSignInvoices={isAdmin} companySettings={companySettingsQuery.data} isCancelSignaturePending={cancelInvoiceSignatureMutation.isPending} onClose={() => setViewInvoiceId('')} onCancelSignature={handleCancelInvoiceSignature} onDownload={(invoice) => downloadInvoicePdf(invoice.id, invoice.invoiceNumber)} onEdit={handleEditInvoice} onEmail={openInvoiceEmailModal} onOpenDevis={(devisId) => setViewDevisId(devisId)} onPaymentSubmit={handleRecordDetailPayment} onPrint={handlePrintInvoicePdf} onStatusChange={(invoice, status) => invoiceStatusMutation.mutate({
+      {viewInvoiceId ? (<InvoiceDetailPanel invoice={invoiceDetailQuery.data} isLoading={invoiceDetailQuery.isLoading} canSignInvoices={isAdmin} companySettings={companySettingsQuery.data} isCancelSignaturePending={cancelInvoiceSignatureMutation.isPending} onClose={() => setViewInvoiceId('')} onCancelSignature={handleCancelInvoiceSignature} onDownload={(invoice) => downloadInvoicePdf(invoice.id, invoice.invoiceNumber)} onEdit={handleEditInvoice} onEmail={openInvoiceEmailModal} onOpenDevis={(devisId) => setViewDevisId(devisId)} onOpenCreditNotes={() => {
+                setViewInvoiceId('');
+                handleViewChange('credit-notes');
+            }} onPaymentSubmit={handleRecordDetailPayment} onPrint={handlePrintInvoicePdf} onStatusChange={(invoice, status) => invoiceStatusMutation.mutate({
                 invoiceId: invoice.id,
                 status,
             })} onSign={handleSignInvoice} onPrepareReminder={(invoice) => handlePrepareReminder({
@@ -4525,6 +4592,7 @@ function App() {
             </div>
           </form>
         </div>) : null}
+      {hasPermission('ai_assistant.access') ? (<AiAdminAssistant context={aiAssistantContext} getApiErrorMessage={getApiErrorMessage}/>) : null}
     </main>);
 }
 type EditorTool = 'erase' | 'restore' | 'pan';
@@ -5277,6 +5345,92 @@ function AuthPanel({ className, email, password, hasAccessToken, isPending, isEr
         </form>)}
     </div>);
 }
+
+function PublicContractSignaturePage({ token }: { token: string }) {
+    const { t } = useTranslation();
+    const toast = useToast();
+    const [signerName, setSignerName] = useState('');
+    const [signerEmail, setSignerEmail] = useState('');
+    const [accepted, setAccepted] = useState(false);
+    const contractQuery = useQuery({
+        queryKey: ['public-contract', token],
+        queryFn: () => getPublicContract(token),
+        retry: false,
+    });
+    const signMutation = useMutation({
+        mutationFn: () => signPublicContract(token, {
+            signerName,
+            signerEmail,
+            accepted: true,
+        }),
+        onSuccess: () => toast.success(t('contracts.public.messages.signed')),
+        onError: (error) => toast.error(getApiErrorMessage(error, t('contracts.public.messages.failed'))),
+    });
+    const contract = contractQuery.data;
+    const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        if (!accepted) {
+            toast.warning(t('contracts.public.messages.acceptRequired'));
+            return;
+        }
+        signMutation.mutate();
+    };
+    return (<main className="min-h-screen bg-slate-50 p-4 text-slate-950">
+      <section className="mx-auto flex min-h-[calc(100vh-2rem)] max-w-4xl items-center">
+        <div className="w-full rounded-2xl border border-slate-200 bg-white shadow-xl">
+          <div className="border-b border-slate-200 p-5">
+            <p className="text-xs font-semibold uppercase text-slate-500">{t('contracts.public.eyebrow')}</p>
+            <h1 className="mt-1 text-2xl font-bold">{contract?.contractNumber ?? t('contracts.public.title')}</h1>
+            {contract ? <p className="mt-1 text-sm text-slate-500">{contract.client.company ?? contract.client.name}</p> : null}
+          </div>
+          <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="max-h-[70vh] overflow-y-auto p-5">
+              {contractQuery.isLoading ? <p className="text-sm text-slate-500">{t('common.loading')}</p> : null}
+              {contractQuery.isError ? <p className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{t('contracts.public.messages.unavailable')}</p> : null}
+              {contract ? (<>
+                <h2 className="text-lg font-semibold">{contract.title}</h2>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <DetailChip label={t('contracts.fields.period')} value={`${formatOptionalShortDate(contract.startDate)} - ${formatOptionalShortDate(contract.endDate)}`}/>
+                  <DetailChip label={t('contracts.fields.amount')} value={contract.amount == null ? '-' : formatCurrency(Number(contract.amount), contract.currency)}/>
+                </div>
+                <pre className="mt-5 whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700">{contract.currentVersion?.content ?? '-'}</pre>
+              </>) : null}
+            </div>
+            <form className="border-t border-slate-200 p-5 lg:border-l lg:border-t-0" onSubmit={handleSubmit}>
+              <h2 className="text-lg font-semibold">{t('contracts.public.signTitle')}</h2>
+              <p className="mt-1 text-sm text-slate-500">{t('contracts.public.signDescription')}</p>
+              <label className="mt-5 block text-sm font-medium text-slate-700">
+                {t('contracts.public.signerName')}
+                <input className="mt-1 h-10 w-full rounded-md border border-slate-200 px-3 text-sm" required onChange={(event) => setSignerName(event.target.value)} value={signerName}/>
+              </label>
+              <label className="mt-4 block text-sm font-medium text-slate-700">
+                {t('contracts.public.signerEmail')}
+                <input className="mt-1 h-10 w-full rounded-md border border-slate-200 px-3 text-sm" required type="email" onChange={(event) => setSignerEmail(event.target.value)} value={signerEmail}/>
+              </label>
+              <label className="mt-4 flex gap-3 text-sm text-slate-600">
+                <input className="mt-1 h-4 w-4 rounded border-slate-300" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} type="checkbox"/>
+                <span>{t('contracts.public.acceptTerms')}</span>
+              </label>
+              <button className="mt-5 h-10 w-full rounded-md bg-primary px-4 text-sm font-semibold text-white transition hover:bg-primary/90 disabled:opacity-60" disabled={!contract || signMutation.isPending || contract.status === 'ACTIVE'} type="submit">
+                {contract?.status === 'ACTIVE' ? t('contracts.public.alreadySigned') : t('contracts.public.sign')}
+              </button>
+            </form>
+          </div>
+        </div>
+      </section>
+    </main>);
+}
+
+function DetailChip({ label, value }: { label: string; value: string }) {
+    return (<div className="rounded-lg border border-slate-200 bg-white p-3">
+      <p className="text-xs font-semibold uppercase text-slate-500">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-slate-950">{value}</p>
+    </div>);
+}
+
+function formatOptionalShortDate(date?: string | null) {
+    return date ? formatShortDate(date) : '-';
+}
 function ReminderRow({ reminder }: {
     reminder: Reminder;
 }) {
@@ -5493,6 +5647,7 @@ type InvoiceDetailPanelProps = {
     onEmail: (invoice: Invoice) => void;
     onEdit: (invoice: Invoice) => void;
     onOpenDevis: (devisId: string) => void;
+    onOpenCreditNotes: () => void;
     onPaymentSubmit: (event: FormEvent<HTMLFormElement>, invoice: Invoice) => void;
     onPrint: (invoice: Invoice) => void;
     onPrepareReminder: (invoice: Invoice) => void;
@@ -5622,7 +5777,7 @@ function DevisDetailPanel({ canDeleteDevis, canSignDevis, canUpdateDevis, devis,
         </div>) : null}
     </aside>);
 }
-function InvoiceDetailPanel({ invoice, isLoading, canSignInvoices, companySettings, isCancelSignaturePending, isEmailPending, isPaymentPending, isSignPending, isStatusPending, onClose, onCancelSignature, onDownload, onEmail, onEdit, onOpenDevis, onPaymentSubmit, onPrint, onPrepareReminder, onSign, onStatusChange, paymentAmount, paymentEntryDate, paymentMethod, paymentReference, setPaymentAmount, setPaymentEntryDate, setPaymentMethod, setPaymentReference, }: InvoiceDetailPanelProps) {
+function InvoiceDetailPanel({ invoice, isLoading, canSignInvoices, companySettings, isCancelSignaturePending, isEmailPending, isPaymentPending, isSignPending, isStatusPending, onClose, onCancelSignature, onDownload, onEmail, onEdit, onOpenDevis, onOpenCreditNotes, onPaymentSubmit, onPrint, onPrepareReminder, onSign, onStatusChange, paymentAmount, paymentEntryDate, paymentMethod, paymentReference, setPaymentAmount, setPaymentEntryDate, setPaymentMethod, setPaymentReference, }: InvoiceDetailPanelProps) {
     const balanceDue = invoice ? Number(invoice.balanceDue) : 0;
     const canCollect = Boolean(invoice && balanceDue > 0 && invoice.status !== 'DRAFT' && invoice.status !== 'CANCELLED');
     const hasCompanySignatureAssets = Boolean(companySettings?.signatureUrl && companySettings?.stampUrl);
@@ -5672,6 +5827,50 @@ function InvoiceDetailPanel({ invoice, isLoading, canSignInvoices, companySettin
               {invoice.sourceDevis ? (<button className="mt-3 block text-sm font-medium text-primary hover:underline" onClick={() => onOpenDevis(invoice.sourceDevis!.id)} type="button">
                   {t('devis.sourceQuote')}: {invoice.sourceDevis.devisNumber}
                 </button>) : null}
+              {invoice.creditSummary && invoice.creditSummary.creditStatus !== 'NONE' ? (<div className="mt-4 rounded-md border border-violet-100 bg-violet-50 p-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-violet-900">{t('creditNotes.invoiceSummary.title')}</p>
+                      <p className="mt-1 text-xs text-violet-700">{t('creditNotes.invoiceSummary.description')}</p>
+                    </div>
+                    <button className="text-sm font-medium text-violet-700 hover:underline" onClick={onOpenCreditNotes} type="button">
+                      {t('creditNotes.openModule')}
+                    </button>
+                  </div>
+                  <div className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
+                    <div className="rounded-md bg-white/70 p-2">
+                      <p className="font-medium uppercase text-violet-600">{t('creditNotes.invoiceSummary.original')}</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-950">{formatCurrency(invoice.creditSummary.originalTotal, invoice.currency)}</p>
+                    </div>
+                    <div className="rounded-md bg-white/70 p-2">
+                      <p className="font-medium uppercase text-violet-600">{t('creditNotes.invoiceSummary.credited')}</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-950">{formatCurrency(invoice.creditSummary.creditedTotal, invoice.currency)}</p>
+                    </div>
+                    <div className="rounded-md bg-white/70 p-2">
+                      <p className="font-medium uppercase text-violet-600">{t('creditNotes.invoiceSummary.net')}</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-950">{formatCurrency(invoice.creditSummary.netTotal, invoice.currency)}</p>
+                    </div>
+                  </div>
+                </div>) : null}
+              {invoice.creditNotes?.length ? (<div className="mt-4 rounded-md border border-slate-200">
+                  <div className="border-b border-slate-200 px-3 py-2">
+                    <p className="text-sm font-semibold text-slate-950">{t('creditNotes.linkedTitle')}</p>
+                  </div>
+                  <div className="divide-y divide-slate-100">
+                    {invoice.creditNotes.map((creditNote) => (<div className="flex flex-col gap-2 px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between" key={creditNote.id}>
+                        <div>
+                          <p className="font-medium text-slate-900">{creditNote.creditNoteNumber}</p>
+                          <p className="text-xs text-slate-500">{formatShortDate(creditNote.issueDate)}</p>
+                        </div>
+                        <div className="flex items-center gap-2 sm:justify-end">
+                          <span className="font-semibold text-slate-900">{formatCurrency(Number(creditNote.total), creditNote.currency)}</span>
+                          <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${creditNoteStatusClasses[creditNote.status]}`}>
+                            {t(`creditNotes.status.${creditNote.status}`)}
+                          </span>
+                        </div>
+                      </div>))}
+                  </div>
+                </div>) : null}
               {invoice.isSigned ? (<div className="mt-3 rounded-md bg-emerald-50 p-3 text-sm text-emerald-800">
                   <p className="font-medium">{t("app.text0403")}</p>
                   <p className="mt-1">{t("app.text0404")}{invoice.signedBy?.name ?? t('auditFinal.userFallback')} ·{' '}

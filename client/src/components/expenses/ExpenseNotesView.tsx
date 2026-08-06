@@ -1847,13 +1847,14 @@ function AnalyticsPanel({ items, title }: { items: ExpenseAnalyticsGroup[]; titl
 }
 
 function EmailHistoryRow({ log, t }: { log: ExpenseEmailLog; t: (key: string, options?: { defaultValue?: string }) => string }) {
+  const statusLabel = t(`expenses.emailStatus.${log.status}`, { defaultValue: t('expenses.emailStatus.unknown') });
   return (
     <div className="grid gap-2 px-3 py-2.5 text-sm sm:grid-cols-[minmax(0,1fr)_auto]">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-semibold text-slate-900">{log.recipientEmail}</span>
           <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${log.status === 'SENT' ? 'bg-emerald-50 text-emerald-700 ring-emerald-200' : 'bg-rose-50 text-rose-700 ring-rose-200'}`}>
-            {log.status}
+            {statusLabel}
           </span>
         </div>
         <p className="mt-1 truncate text-xs text-slate-500" title={log.subject}>{log.subject}</p>

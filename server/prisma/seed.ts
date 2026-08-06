@@ -24,8 +24,20 @@ async function main() {
   await prisma.recurringExecution.deleteMany();
   await prisma.recurringPlanItem.deleteMany();
   await prisma.recurringPlan.deleteMany();
+  await prisma.aiPendingAction.deleteMany();
+  await prisma.aiMessage.deleteMany();
+  await prisma.aiConversation.deleteMany();
   await prisma.reminder.deleteMany();
   await prisma.payment.deleteMany();
+  await prisma.contractEmailLog.deleteMany();
+  await prisma.contractAuditLog.deleteMany();
+  await prisma.contractSignatureLink.deleteMany();
+  await prisma.contractVersion.deleteMany();
+  await prisma.contract.deleteMany();
+  await prisma.creditNoteEmailLog.deleteMany();
+  await prisma.creditNoteAuditLog.deleteMany();
+  await prisma.creditNoteLine.deleteMany();
+  await prisma.creditNote.deleteMany();
   await prisma.expenseAuditLog.deleteMany();
   await prisma.expenseEmailLog.deleteMany();
   await prisma.expenseAIAnalysis.deleteMany();
@@ -41,6 +53,9 @@ async function main() {
   await prisma.product.deleteMany();
   await prisma.customer.deleteMany();
   await prisma.user.deleteMany();
+  await seedAiAssistantPermissions();
+  await seedDefaultCreditNoteReasons();
+  await seedDefaultContractTemplates();
 
   const [adminPasswordHash, employeePasswordHash] = await Promise.all([
     bcrypt.hash('admin123', 12),
@@ -469,6 +484,171 @@ async function main() {
   console.log('Employee: sara@billingsystem.com / employee123');
   console.log('Employee: youssef@billingsystem.com / employee123');
   console.log(`Invoices created: ${[draftInvoice, sentInvoice, partiallyPaidInvoice, paidInvoice].length}`);
+}
+
+const defaultCreditNoteReasons = [
+  ['BILLING_ERROR', 'Erreur de facturation', 'Billing error', 'خطأ في الفوترة', 'Correction for an incorrect invoice amount, reference, or billing information.', 'CORRECTION', true, 10],
+  ['PRICE_CORRECTION', 'Correction de prix', 'Price correction', 'تصحيح السعر', 'Correction applied because the invoiced price was incorrect.', 'CORRECTION', true, 20],
+  ['QUANTITY_CORRECTION', 'Correction de quantité', 'Quantity correction', 'تصحيح الكمية', 'Correction applied because the invoiced quantity was incorrect.', 'CORRECTION', true, 30],
+  ['PRODUCT_RETURN', 'Retour de produit', 'Product return', 'إرجاع منتج', 'Credit note issued after returned goods.', 'RETURN', false, 40],
+  ['SERVICE_CANCELLATION', 'Annulation de service', 'Service cancellation', 'إلغاء خدمة', 'Credit note issued after a cancelled service.', 'CANCELLATION', false, 50],
+  ['DUPLICATE_INVOICE', 'Facture en double', 'Duplicate invoice', 'فاتورة مكررة', 'Credit note issued to reverse a duplicate invoice.', 'CORRECTION', true, 60],
+  ['COMMERCIAL_DISCOUNT', 'Remise commerciale', 'Commercial discount', 'خصم تجاري', 'Commercial gesture or discount granted after invoicing.', 'COMMERCIAL', false, 70],
+  ['CUSTOMER_REFUND', 'Remboursement client', 'Customer refund', 'استرداد للعميل', 'Credit note linked to an amount to refund to the customer.', 'REFUND', false, 80],
+  ['ORDER_CANCELLATION', 'Annulation de commande', 'Order cancellation', 'إلغاء الطلب', 'Credit note issued after order cancellation.', 'CANCELLATION', false, 90],
+  ['TAX_CORRECTION', 'Correction de TVA', 'Tax correction', 'تصحيح الضريبة', 'Correction of VAT or tax calculation.', 'CORRECTION', true, 100],
+  ['DELIVERY_PROBLEM', 'Problème de livraison', 'Delivery issue', 'مشكلة في التسليم', 'Credit note issued due to a delivery issue.', 'DELIVERY', true, 110],
+  ['OTHER', 'Autre', 'Other', 'آخر', 'Other reason requiring a detailed explanation.', 'OTHER', true, 120],
+] as const;
+
+const aiAssistantPermissions = [
+  ['ai_assistant.access', 'Access the secure AI admin assistant', 'access'],
+  ['ai_assistant.use_read_tools', 'Use read-only AI assistant tools', 'use_read_tools'],
+  ['ai_assistant.use_write_tools', 'Prepare AI assistant actions requiring confirmation', 'use_write_tools'],
+  ['ai_assistant.confirm_actions', 'Confirm pending AI assistant actions', 'confirm_actions'],
+  ['ai_assistant.view_history', 'View AI assistant conversation history', 'view_history'],
+  ['ai_assistant.manage_tools', 'Manage AI assistant tool access', 'manage_tools'],
+] as const;
+
+async function seedAiAssistantPermissions() {
+  for (const [key, description, action] of aiAssistantPermissions) {
+    await prisma.permission.upsert({
+      where: { key },
+      update: { description, resource: 'ai_assistant', action },
+      create: { key, description, resource: 'ai_assistant', action },
+    });
+  }
+
+  const adminRole = await prisma.rbacRole.findUnique({ where: { name: 'ADMIN' } });
+  if (!adminRole) return;
+
+  const permissions = await prisma.permission.findMany({
+    where: { key: { in: aiAssistantPermissions.map(([key]) => key) } },
+    select: { id: true },
+  });
+
+  await prisma.rolePermission.createMany({
+    data: permissions.map((permission) => ({
+      roleId: adminRole.id,
+      permissionId: permission.id,
+      scope: 'ALL',
+    })),
+    skipDuplicates: true,
+  });
+}
+
+async function seedDefaultCreditNoteReasons() {
+  for (const [code, nameFr, nameEn, nameAr, description, category, requiresComment, sortOrder] of defaultCreditNoteReasons) {
+    await prisma.creditNoteReason.upsert({
+      where: { code },
+      update: {
+        nameFr,
+        nameEn,
+        nameAr,
+        description,
+        category,
+        requiresComment,
+        isActive: true,
+        isSystem: true,
+        sortOrder,
+      },
+      create: {
+        code,
+        nameFr,
+        nameEn,
+        nameAr,
+        description,
+        category,
+        requiresComment,
+        isActive: true,
+        isSystem: true,
+        sortOrder,
+      },
+    });
+  }
+}
+
+const defaultContractTemplates = [
+  {
+    code: 'SERVICE_AGREEMENT',
+    nameFr: 'Contrat de prestation de services',
+    nameEn: 'Service agreement',
+    nameAr: '\u0639\u0642\u062f \u062a\u0642\u062f\u064a\u0645 \u062e\u062f\u0645\u0627\u062a',
+    description: 'Modele standard pour prestations de services.',
+    content: [
+      'Objet du contrat',
+      'Le prestataire fournit les services decrits dans la proposition acceptee.',
+      '',
+      'Obligations',
+      'Chaque partie s engage a executer ses obligations avec diligence et bonne foi.',
+      '',
+      'Paiement',
+      'Les montants, taxes et echeances sont definis dans les conditions particulieres.',
+      '',
+      'Confidentialite',
+      'Les informations confidentielles doivent rester protegees pendant et apres le contrat.',
+    ].join('\n'),
+    sortOrder: 10,
+  },
+  {
+    code: 'MAINTENANCE',
+    nameFr: 'Contrat de maintenance',
+    nameEn: 'Maintenance contract',
+    nameAr: '\u0639\u0642\u062f \u0635\u064a\u0627\u0646\u0629',
+    description: 'Modele pour maintenance et support.',
+    content: [
+      'Objet du contrat',
+      'Le prestataire assure la maintenance corrective et preventive des services convenus.',
+      '',
+      'Niveaux de service',
+      'Les delais d intervention sont definis dans les conditions particulieres.',
+      '',
+      'Paiement',
+      'La facturation suit la periodicite convenue entre les parties.',
+    ].join('\n'),
+    sortOrder: 20,
+  },
+  {
+    code: 'SUBSCRIPTION',
+    nameFr: 'Contrat d abonnement',
+    nameEn: 'Subscription contract',
+    nameAr: '\u0639\u0642\u062f \u0627\u0634\u062a\u0631\u0627\u0643',
+    description: 'Modele pour abonnement recurrent.',
+    content: [
+      'Objet du contrat',
+      'Le client souscrit a un service recurrent selon les conditions particulieres.',
+      '',
+      'Renouvellement',
+      'Le renouvellement est gere selon le type choisi dans le contrat.',
+      '',
+      'Resiliation',
+      'Chaque partie peut resilier selon les preavis convenus.',
+    ].join('\n'),
+    sortOrder: 30,
+  },
+] as const;
+
+async function seedDefaultContractTemplates() {
+  for (const template of defaultContractTemplates) {
+    await prisma.contractTemplate.upsert({
+      where: { code: template.code },
+      update: {
+        nameFr: template.nameFr,
+        nameEn: template.nameEn,
+        nameAr: template.nameAr,
+        description: template.description,
+        content: template.content,
+        isActive: true,
+        isSystem: true,
+        sortOrder: template.sortOrder,
+      },
+      create: {
+        ...template,
+        isActive: true,
+        isSystem: true,
+      },
+    });
+  }
 }
 
 main()

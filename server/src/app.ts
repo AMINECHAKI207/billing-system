@@ -6,6 +6,7 @@ import path from 'path';
 import { env } from '@config/env';
 import { isDatabaseConnected } from '@config/database';
 import { requestId } from '@middleware/requestId';
+import { auditContext } from '@middleware/auditContext';
 import { requestLogger } from '@middleware/requestLogger';
 import { errorHandler } from '@middleware/errorHandler';
 import { generalLimiter } from '@middleware/rateLimiter';
@@ -22,6 +23,11 @@ import userRouter from '@modules/user/user.routes';
 import rbacRouter from '@modules/rbac/rbac.routes';
 import recurringRouter from '@modules/recurring/recurring.routes';
 import expenseRouter from '@modules/expense/expense.routes';
+import creditNoteRouter from '@modules/credit-note/creditNote.routes';
+import creditNoteReasonRouter from '@modules/credit-note/creditNoteReason.routes';
+import contractRouter, { publicContractRouter } from '@modules/contract/contract.routes';
+import auditRouter from '@modules/audit/audit.routes';
+import aiAssistantRouter from '@modules/ai-assistant/aiAssistant.routes';
 
 export function createApp(): Application {
   const app = express();
@@ -45,6 +51,7 @@ export function createApp(): Application {
   app.use(cookieParser(env.COOKIE_SECRET));
 
   app.use(requestId);
+  app.use(auditContext);
   app.use(requestLogger);
   app.use('/api', generalLimiter);
   app.use('/uploads', express.static(path.resolve(process.cwd(), env.UPLOADS_DIR)));
@@ -76,6 +83,12 @@ export function createApp(): Application {
   app.use('/api/settings', settingsRouter);
   app.use('/api/products', productRouter);
   app.use('/api/expense-notes', expenseRouter);
+  app.use('/api/credit-notes', creditNoteRouter);
+  app.use('/api/credit-note-reasons', creditNoteReasonRouter);
+  app.use('/api/contracts', contractRouter);
+  app.use('/api/audit-logs', auditRouter);
+  app.use('/api/ai-assistant', aiAssistantRouter);
+  app.use('/api/public', publicContractRouter);
   app.use('/api/payments', paymentRouter);
   app.use('/api/reports', reportRouter);
   app.use('/api/users', userRouter);

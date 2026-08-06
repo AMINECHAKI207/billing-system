@@ -277,7 +277,7 @@
     background: linear-gradient(180deg, #0f172a 0%, #111827 52%, #020617 100%);
     border-color: rgb(30 41 59 / 0.9);
     box-shadow: 18px 0 50px rgb(15 23 42 / 0.18);
-    overflow: visible;
+    overflow: hidden;
     transition: width 280ms ease, transform 280ms ease;
   }
 
@@ -394,6 +394,26 @@
   .nav-menu {
     display: grid;
     gap: 0.35rem;
+    align-content: start;
+    scrollbar-color: rgb(71 85 105 / 0.7) transparent;
+    scrollbar-width: thin;
+  }
+
+  .nav-menu::-webkit-scrollbar {
+    width: 0.4rem;
+  }
+
+  .nav-menu::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .nav-menu::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: rgb(71 85 105 / 0.7);
+  }
+
+  .nav-menu::-webkit-scrollbar-thumb:hover {
+    background: rgb(100 116 139 / 0.85);
   }
 
   .nav-item {
@@ -911,3 +931,11 @@ html[dir="rtl"] input,
 html[dir="rtl"] textarea,
 html[dir="rtl"] select { text-align: right; }
 html[dir="ltr"] body { direction: ltr; }
+
+.i18n-text-start { text-align: start; }
+.i18n-text-end { text-align: end; }
+.i18n-ms-auto { margin-inline-start: auto; }
+.i18n-me-auto { margin-inline-end: auto; }
+.i18n-px { padding-inline: 1rem; }
+.i18n-border-start { border-inline-start: 1px solid hsl(var(--border)); }
+.i18n-border-end { border-inline-end: 1px solid hsl(var(--border)); }

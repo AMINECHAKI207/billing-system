@@ -1,4 +1,5 @@
 import { AlertTriangle, CheckCircle2, Info, XCircle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { ConfirmDialogOptions, NotificationVariant } from '@/types/notification';
 
 type ConfirmDialogProps = {
@@ -32,6 +33,8 @@ const variantClasses: Record<NotificationVariant, { icon: typeof Info; iconClass
 };
 
 export function ConfirmDialog({ isOpen, options, onCancel, onConfirm }: ConfirmDialogProps) {
+  const { t } = useTranslation();
+
   if (!isOpen || !options) return null;
 
   const variant = options.variant ?? 'info';
@@ -40,7 +43,7 @@ export function ConfirmDialog({ isOpen, options, onCancel, onConfirm }: ConfirmD
 
   return (
     <div aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4" role="dialog">
-      <button aria-label="Close confirmation dialog" className="absolute inset-0 h-full w-full cursor-default" onClick={onCancel} type="button" />
+      <button aria-label={t('notifications.confirm.close')} className="absolute inset-0 h-full w-full cursor-default" onClick={onCancel} type="button" />
       <div className="relative w-full max-w-md rounded-xl border border-border bg-card p-5 text-card-foreground shadow-2xl">
         <div className="flex items-start gap-3">
           <span className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full ring-1 ${styles.iconClass}`}>
@@ -53,10 +56,10 @@ export function ConfirmDialog({ isOpen, options, onCancel, onConfirm }: ConfirmD
         </div>
         <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button className="inline-flex h-9 items-center justify-center rounded-md border border-border px-3 text-sm font-medium text-foreground transition hover:bg-muted focus:outline-none focus:ring-4 focus:ring-ring/20" onClick={onCancel} type="button">
-            {options.cancelText ?? 'Cancel'}
+            {options.cancelText ?? t('common.cancel')}
           </button>
           <button className={`inline-flex h-9 items-center justify-center rounded-md px-3 text-sm font-medium transition focus:outline-none focus:ring-4 focus:ring-offset-0 ${styles.buttonClass}`} onClick={onConfirm} type="button">
-            {options.confirmText ?? 'Confirm'}
+            {options.confirmText ?? t('common.confirm')}
           </button>
         </div>
       </div>

@@ -12,6 +12,10 @@
     "dev:client": "npm run dev --workspace=client",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "test": "npm run test --workspace=server",
+    "i18n:check": "npm run i18n:check --workspace=client",
+    "i18n:scan": "npm run i18n:scan --workspace=client",
+    "i18n:test": "npm run i18n:test --workspace=client",
+    "test:i18n": "npm run test:i18n --workspace=client",
     "test:e2e": "playwright test",
     "test:e2e:smoke": "playwright test --grep @smoke",
     "test:e2e:headed": "playwright test --headed",
@@ -22,7 +26,8 @@
     "lint:client": "npm run lint --workspace=client",
     "audit": "npm audit --audit-level=critical",
     "db:validate": "npm run db:validate --workspace=server",
-    "check": "npm run audit && npm run db:validate && npm run lint:client && npm test && npm run build",
+    "check": "npm run audit && npm run db:validate && npm run i18n:check && npm run i18n:scan && npm run lint:client && npm test && npm run build",
+    "verify": "npm run i18n:check && npm run i18n:scan && npm run i18n:test && npm run typecheck && npm run lint && npm test && npm run build",
     "build": "npm run build:server && npm run build:client",
     "build:server": "npm run build --workspace=server",
     "build:client": "npm run build --workspace=client",
@@ -32,7 +37,10 @@
     "db:studio": "npm run db:studio --workspace=server",
     "setup:dev": "npm install && npm run db:generate && npm run db:migrate && npm run db:seed",
     "db:status": "npm run db:status --workspace=server",
-    "db:migrate:prod": "npm run db:migrate:prod --workspace=server"
+    "db:migrate:prod": "npm run db:migrate:prod --workspace=server",
+    "demo:timesheets": "npm run demo:timesheets --workspace=server",
+    "demo:ai-assistant": "npm run demo:ai-assistant --workspace=server",
+    "demo:timesheets:clean": "npm run demo:timesheets:clean --workspace=server"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.0",

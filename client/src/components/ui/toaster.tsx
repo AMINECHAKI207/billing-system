@@ -1,5 +1,6 @@
 import { AlertTriangle, CheckCircle2, Info, X, XCircle } from 'lucide-react';
 import { useContext } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ToastContext } from '@/contexts/toast-context';
 import type { ToastVariant } from '@/types/notification';
 
@@ -28,6 +29,7 @@ const toastStyles: Record<ToastVariant, { icon: typeof Info; iconClass: string; 
 
 export function Toaster() {
   const context = useContext(ToastContext);
+  const { t } = useTranslation();
   if (!context || context.toasts.length === 0) return null;
 
   return (
@@ -44,7 +46,7 @@ export function Toaster() {
               <div className="text-sm leading-5 text-foreground">{toast.message}</div>
               {toast.description ? <div className="mt-1 text-sm leading-5 text-muted-foreground">{toast.description}</div> : null}
             </div>
-            <button aria-label="Dismiss notification" className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground focus:outline-none focus:ring-4 focus:ring-ring/20" onClick={() => context.dismiss(toast.id)} type="button">
+            <button aria-label={t('notifications.toast.dismiss')} className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground focus:outline-none focus:ring-4 focus:ring-ring/20" onClick={() => context.dismiss(toast.id)} type="button">
               <X className="h-4 w-4" />
             </button>
           </div>

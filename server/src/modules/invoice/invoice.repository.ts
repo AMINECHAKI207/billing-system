@@ -465,6 +465,20 @@ export class InvoiceRepository {
       sourceDevis: {
         select: { id: true, devisNumber: true, status: true },
       },
+      creditNotes: {
+        orderBy: { issueDate: 'desc' as const },
+        include: {
+          lines: {
+            orderBy: { sortOrder: 'asc' as const },
+          },
+          validatedBy: {
+            select: { id: true, name: true, email: true },
+          },
+          refundedBy: {
+            select: { id: true, name: true, email: true },
+          },
+        },
+      },
       payments: {
         orderBy: { paymentDate: 'desc' as const },
       },

@@ -1,10 +1,20 @@
 import axios from 'axios';
 import type {
   ApiResponse,
+  AuditLog,
+  AuditLogFilters,
   ChangePasswordForm,
   CompanySettings,
   Customer,
   CustomerFilters,
+  CreditNote,
+  CreditNoteFilters,
+  CreditNoteReason,
+  Contract,
+  ContractFilters,
+  ContractTemplate,
+  CreateContractForm,
+  CreateCreditNoteForm,
   DashboardFilters,
   DashboardStats,
   EmailDeliveryStatus,
@@ -42,6 +52,7 @@ import type {
   User,
   UserFilters,
   UpdateCustomerForm,
+  UpdateContractForm,
   UpdateCompanySettingsForm,
   UpdateProductForm,
   UpdateUserForm,
@@ -129,6 +140,130 @@ export async function logout(): Promise<void> {
   clearAuthSession();
 }
 
+export type AiToolRiskLevel = 'READ_ONLY' | 'CONFIRMATION_REQUIRED' | 'REAUTH_REQUIRED';
+export type AiActionStatus = 'PENDING' | 'CONFIRMED' | 'EXECUTED' | 'CANCELLED' | 'EXPIRED' | 'FAILED';
+
+export type AiToolDefinition = {
+  name: string;
+  description: string;
+  module: string;
+  riskLevel: AiToolRiskLevel;
+  requiredPermission: string;
+};
+
+export type AiPendingAction = {
+  id: string;
+  toolName: string;
+  inputPayload: unknown;
+  previewPayload: unknown;
+  riskLevel: AiToolRiskLevel;
+  requiredPermission: string;
+  status: AiActionStatus;
+  expiresAt: string;
+  resultPayload?: unknown;
+  errorPayload?: unknown;
+  createdAt: string;
+};
+
+export type AiMessage = {
+  id: string;
+  role: 'USER' | 'ASSISTANT' | 'TOOL' | 'SYSTEM';
+  content: string;
+  metadata?: unknown;
+  createdAt: string;
+};
+
+export type AiConversation = {
+  id: string;
+  title?: string | null;
+  language: string;
+  messages: AiMessage[];
+  pendingActions: AiPendingAction[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AiAssistantBriefing = {
+  generatedAt?: string;
+  pendingApprovals?: number;
+  revenue?: Record<string, unknown> | null;
+  highestRiskContract?: Record<string, unknown> | null;
+  highestRiskCustomer?: Record<string, unknown> | null;
+  executiveSummary?: Record<string, unknown> | null;
+  priorities?: Array<Record<string, unknown>>;
+  insights?: Array<Record<string, unknown>>;
+  recentActivity?: Array<Record<string, unknown>>;
+  alerts?: Array<Record<string, unknown>>;
+  recommendations?: unknown[];
+};
+
+export async function getAiAssistantBriefing(): Promise<AiAssistantBriefing> {
+  const response = await api.get<ApiResponse<{ briefing: AiAssistantBriefing }>>('/ai-assistant/briefing');
+  return response.data.data.briefing;
+}
+
+export async function getAiAssistantTools(): Promise<AiToolDefinition[]> {
+  const response = await api.get<ApiResponse<{ tools: AiToolDefinition[] }>>('/ai-assistant/tools');
+  return response.data.data.tools;
+}
+
+export async function createAiConversation(language = 'fr'): Promise<AiConversation> {
+  const response = await api.post<ApiResponse<{ conversation: AiConversation }>>('/ai-assistant/conversations', { language });
+  return response.data.data.conversation;
+}
+
+export async function getAiConversation(conversationId: string): Promise<AiConversation> {
+  const response = await api.get<ApiResponse<{ conversation: AiConversation }>>(`/ai-assistant/conversations/${conversationId}`);
+  return response.data.data.conversation;
+}
+
+export async function getAiConversationHistory(): Promise<AiConversation[]> {
+  const response = await api.get<ApiResponse<{ data: AiConversation[] }>>('/ai-assistant/conversations?limit=10');
+  return response.data.data.data;
+}
+
+export async function archiveAiConversation(conversationId: string): Promise<AiConversation> {
+  const response = await api.post<ApiResponse<{ conversation: AiConversation }>>(`/ai-assistant/conversations/${conversationId}/archive`);
+  return response.data.data.conversation;
+}
+
+export type AiAssistantContext = {
+  entityType?: 'contract' | 'invoice' | 'timesheet' | 'client';
+  entityId?: string;
+  readableReference?: string;
+};
+
+export async function sendAiAssistantMessage(conversationId: string, content: string, language = 'fr', context?: AiAssistantContext): Promise<{
+  message: AiMessage;
+  executionResult: unknown;
+}> {
+  const response = await api.post<ApiResponse<{ message: AiMessage; executionResult: unknown }>>(
+    `/ai-assistant/conversations/${conversationId}/messages`,
+    { content, language, context }
+  );
+  return response.data.data;
+}
+
+export async function executeAiTool(input: {
+  toolName: string;
+  input: Record<string, unknown>;
+  conversationId?: string;
+  idempotencyKey?: string;
+}): Promise<unknown> {
+  const response = await api.post<ApiResponse<unknown>>('/ai-assistant/tools/execute', input);
+  return response.data.data;
+}
+
+export async function confirmAiAction(actionId: string): Promise<{ action: AiPendingAction; result: unknown }> {
+  const response = await api.post<ApiResponse<{ action: AiPendingAction; result: unknown }>>(`/ai-assistant/actions/${actionId}/confirm`);
+  return response.data.data;
+}
+
+export async function cancelAiAction(actionId: string): Promise<{ action: AiPendingAction }> {
+  const response = await api.post<ApiResponse<{ action: AiPendingAction }>>(`/ai-assistant/actions/${actionId}/cancel`);
+  return response.data.data;
+}
+
 export async function changePassword(input: ChangePasswordForm): Promise<void> {
   await api.patch('/auth/password', input);
 }
@@ -147,6 +282,35 @@ export type UserListResponse = {
     totalPages: number;
   };
 };
+
+export type AuditLogListResponse = {
+  data: AuditLog[];
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+};
+
+export async function getAuditLogs(filters: AuditLogFilters = {}): Promise<AuditLogListResponse> {
+  const response = await api.get<ApiResponse<{ auditLogs: AuditLog[] }>>('/audit-logs', {
+    params: filters,
+  });
+  return {
+    data: response.data.data.auditLogs,
+    meta: response.data.meta ?? { page: filters.page ?? 1, limit: filters.limit ?? 25, total: 0, totalPages: 0 },
+  };
+}
+
+export async function exportAuditLogs(filters: AuditLogFilters & { format: 'csv' | 'excel' | 'pdf' }): Promise<void> {
+  const response = await api.get<Blob>('/audit-logs/export', {
+    params: filters,
+    responseType: 'blob',
+  });
+  const extension = filters.format === 'excel' ? 'xlsx' : filters.format;
+  downloadBlob(response.data, `audit-logs-${new Date().toISOString().slice(0, 10)}.${extension}`);
+}
 
 export async function getUsers(filters: UserFilters = {}): Promise<UserListResponse> {
   const response = await api.get<ApiResponse<UserListResponse>>('/users', {
@@ -617,6 +781,357 @@ export async function sendInvoiceEmail(
   >(`/invoices/${invoiceId}/email`, input);
 
   return response.data.data;
+}
+
+export type CreditNoteListResponse = {
+  data: CreditNote[];
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+};
+
+export async function getCreditNotes(filters: CreditNoteFilters = {}): Promise<CreditNoteListResponse> {
+  const response = await api.get<ApiResponse<CreditNoteListResponse>>('/credit-notes', { params: filters });
+  const payload = response.data.data;
+  const total = 'total' in payload ? Number(payload.total) : payload.data.length;
+  const limit = (filters.limit ?? payload.data.length) || 1;
+  return {
+    data: payload.data,
+    meta: payload.meta ?? {
+      page: filters.page ?? 1,
+      limit,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    },
+  };
+}
+
+export async function getCreditNoteReasons(includeInactive = false): Promise<CreditNoteReason[]> {
+  const response = await api.get<ApiResponse<{ reasons: CreditNoteReason[] }>>('/credit-note-reasons', {
+    params: includeInactive ? { includeInactive: 'true' } : undefined,
+  });
+  return response.data.data.reasons;
+}
+
+export async function createCreditNoteReason(input: {
+  code: string;
+  nameFr: string;
+  nameEn: string;
+  nameAr: string;
+  description?: string | null;
+  category: string;
+  isActive?: boolean;
+  requiresComment?: boolean;
+  sortOrder?: number;
+}): Promise<CreditNoteReason> {
+  const response = await api.post<ApiResponse<{ reason: CreditNoteReason }>>('/credit-note-reasons', input);
+  return response.data.data.reason;
+}
+
+export async function updateCreditNoteReason(id: string, input: Partial<{
+  code: string;
+  nameFr: string;
+  nameEn: string;
+  nameAr: string;
+  description: string | null;
+  category: string;
+  isActive: boolean;
+  requiresComment: boolean;
+  sortOrder: number;
+}>): Promise<CreditNoteReason> {
+  const response = await api.patch<ApiResponse<{ reason: CreditNoteReason }>>(`/credit-note-reasons/${id}`, input);
+  return response.data.data.reason;
+}
+
+export async function getCreditNoteById(id: string): Promise<CreditNote> {
+  const response = await api.get<ApiResponse<{ creditNote: CreditNote }>>(`/credit-notes/${id}`);
+  return response.data.data.creditNote;
+}
+
+export async function createCreditNote(input: CreateCreditNoteForm): Promise<CreditNote> {
+  const response = await api.post<ApiResponse<{ creditNote: CreditNote }>>('/credit-notes', input);
+  return response.data.data.creditNote;
+}
+
+export async function updateCreditNote(id: string, input: Omit<CreateCreditNoteForm, 'invoiceId'>): Promise<CreditNote> {
+  const response = await api.patch<ApiResponse<{ creditNote: CreditNote }>>(`/credit-notes/${id}`, input);
+  return response.data.data.creditNote;
+}
+
+export async function deleteCreditNote(id: string): Promise<void> {
+  await api.delete(`/credit-notes/${id}`);
+}
+
+export async function validateCreditNote(id: string): Promise<CreditNote> {
+  const response = await api.post<ApiResponse<{ creditNote: CreditNote }>>(`/credit-notes/${id}/validate`);
+  return response.data.data.creditNote;
+}
+
+export async function cancelCreditNote(id: string, reason: string): Promise<CreditNote> {
+  const response = await api.post<ApiResponse<{ creditNote: CreditNote }>>(`/credit-notes/${id}/cancel`, { reason });
+  return response.data.data.creditNote;
+}
+
+export async function refundCreditNote(id: string, amount: number, refundDate: string, comment?: string): Promise<CreditNote> {
+  const response = await api.post<ApiResponse<{ creditNote: CreditNote }>>(`/credit-notes/${id}/refund`, { amount, refundDate, comment });
+  return response.data.data.creditNote;
+}
+
+export function getCreditNotePdfUrl(id: string, language = 'fr') {
+  return `/credit-notes/${id}/pdf?language=${encodeURIComponent(language)}`;
+}
+
+export async function downloadCreditNotePdf(id: string, creditNoteNumber: string, language = 'fr'): Promise<void> {
+  const response = await api.get<Blob>(getCreditNotePdfUrl(id, language), { responseType: 'blob' });
+  const url = URL.createObjectURL(response.data);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${creditNoteNumber}.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+export async function printCreditNotePdf(id: string, language = 'fr'): Promise<void> {
+  const response = await api.get<Blob>(getCreditNotePdfUrl(id, language), { responseType: 'blob' });
+  const url = URL.createObjectURL(response.data);
+  const printWindow = window.open(url, '_blank');
+  if (printWindow) {
+    printWindow.addEventListener('load', () => printWindow.print(), { once: true });
+  }
+}
+
+export async function sendCreditNoteEmail(
+  id: string,
+  input: { recipientEmail?: string; subject?: string; message?: string; pdfLanguage?: 'fr' | 'en' | 'ar' } = {}
+): Promise<{ email: { to: string; subject: string } }> {
+  const response = await api.post<ApiResponse<{ email: { to: string; subject: string } }>>(`/credit-notes/${id}/email`, input);
+  return response.data.data;
+}
+
+export type ContractListResponse = {
+  data: Contract[];
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasNextPage?: boolean;
+    hasPrevPage?: boolean;
+  };
+  stats?: Record<string, number>;
+};
+
+export async function getContracts(filters: ContractFilters = {}): Promise<ContractListResponse> {
+  const response = await api.get<ApiResponse<ContractListResponse>>('/contracts', { params: filters });
+  return response.data.data;
+}
+
+export async function getContractById(id: string): Promise<Contract> {
+  const response = await api.get<ApiResponse<{ contract: Contract }>>(`/contracts/${id}`);
+  return response.data.data.contract;
+}
+
+export async function getContractTemplates(): Promise<ContractTemplate[]> {
+  const response = await api.get<ApiResponse<{ templates: ContractTemplate[] }>>('/contracts/templates');
+  return response.data.data.templates;
+}
+
+export async function createContract(input: CreateContractForm): Promise<Contract> {
+  const response = await api.post<ApiResponse<{ contract: Contract }>>('/contracts', input);
+  return response.data.data.contract;
+}
+
+export async function updateContract(id: string, input: UpdateContractForm): Promise<Contract> {
+  const response = await api.patch<ApiResponse<{ contract: Contract }>>(`/contracts/${id}`, input);
+  return response.data.data.contract;
+}
+
+export async function deleteContract(id: string): Promise<void> {
+  await api.delete(`/contracts/${id}`);
+}
+
+export async function sendContract(id: string): Promise<Contract> {
+  const response = await api.post<ApiResponse<{ contract: Contract }>>(`/contracts/${id}/send`);
+  return response.data.data.contract;
+}
+
+export async function signContractForCompany(id: string): Promise<Contract> {
+  const response = await api.post<ApiResponse<{ contract: Contract }>>(`/contracts/${id}/sign-company`);
+  return response.data.data.contract;
+}
+
+export async function revokeContractSignature(id: string, input: {
+  reason: string;
+  internalNote?: string | null;
+  confirmed: true;
+}): Promise<Contract> {
+  const response = await api.post<ApiResponse<{ contract: Contract }>>(`/contracts/${id}/signature/revoke`, input);
+  return response.data.data.contract;
+}
+
+export async function cancelContract(id: string): Promise<Contract> {
+  const response = await api.post<ApiResponse<{ contract: Contract }>>(`/contracts/${id}/cancel`);
+  return response.data.data.contract;
+}
+
+export async function terminateContract(id: string): Promise<Contract> {
+  const response = await api.post<ApiResponse<{ contract: Contract }>>(`/contracts/${id}/terminate`);
+  return response.data.data.contract;
+}
+
+export async function updateContractStatus(id: string, status: Contract['status']): Promise<Contract> {
+  const response = await api.patch<ApiResponse<{ contract: Contract }>>(`/contracts/${id}/status`, { status });
+  return response.data.data.contract;
+}
+
+export async function sendContractEmail(id: string, input: {
+  to: string;
+  cc?: string[];
+  bcc?: string[];
+  subject?: string;
+  message?: string;
+  pdfLanguage?: 'fr' | 'en' | 'ar';
+  signatureLinkExpiresInDays?: number;
+}): Promise<{ contract: Contract; signatureUrl: string }> {
+  const response = await api.post<ApiResponse<{ contract: Contract; signatureUrl: string }>>(`/contracts/${id}/email`, input);
+  return response.data.data;
+}
+
+export function getContractPdfUrl(id: string, language?: string) {
+  const query = language ? `?language=${encodeURIComponent(language)}` : '';
+  return `/contracts/${id}/pdf${query}`;
+}
+
+export function getContractPdfPreviewUrl(id: string, language?: string) {
+  const query = language ? `?language=${encodeURIComponent(language)}` : '';
+  return `/contracts/${id}/pdf/preview${query}`;
+}
+
+export async function downloadContractPdf(id: string, contractNumber: string, language?: string): Promise<void> {
+  const response = await api.get<Blob>(getContractPdfUrl(id, language), { responseType: 'blob' });
+  const url = URL.createObjectURL(response.data);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${contractNumber}.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+export async function previewContractPdf(id: string, language?: string): Promise<void> {
+  const response = await api.get<Blob>(getContractPdfPreviewUrl(id, language), { responseType: 'blob' });
+  const url = URL.createObjectURL(response.data);
+  window.open(url, '_blank', 'noopener,noreferrer');
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+export async function getContractEmailHistory(id: string): Promise<Contract['emailLogs']> {
+  const response = await api.get<ApiResponse<{ emailLogs: NonNullable<Contract['emailLogs']> }>>(`/contracts/${id}/email-history`);
+  return response.data.data.emailLogs;
+}
+
+export async function createContractTimeEntry(id: string, input: {
+  userId?: string;
+  workDate: string;
+  startTime?: string | null;
+  endTime?: string | null;
+  breakMinutes?: number;
+  quantity?: number;
+  activityType?: string | null;
+  description: string;
+  internalNote?: string | null;
+  billable?: boolean;
+  submit?: boolean;
+}): Promise<NonNullable<Contract['timeEntries']>[number]> {
+  const response = await api.post<ApiResponse<{ entry: NonNullable<Contract['timeEntries']>[number] }>>(`/contracts/${id}/time-entries`, input);
+  return response.data.data.entry;
+}
+
+export async function updateContractTimeEntry(id: string, entryId: string, input: {
+  workDate?: string;
+  startTime?: string | null;
+  endTime?: string | null;
+  breakMinutes?: number;
+  quantity?: number;
+  activityType?: string | null;
+  description?: string;
+  internalNote?: string | null;
+  billable?: boolean;
+}): Promise<NonNullable<Contract['timeEntries']>[number]> {
+  const response = await api.patch<ApiResponse<{ entry: NonNullable<Contract['timeEntries']>[number] }>>(`/contracts/${id}/time-entries/${entryId}`, input);
+  return response.data.data.entry;
+}
+
+export async function submitContractTimeEntry(id: string, entryId: string): Promise<NonNullable<Contract['timeEntries']>[number]> {
+  const response = await api.post<ApiResponse<{ entry: NonNullable<Contract['timeEntries']>[number] }>>(`/contracts/${id}/time-entries/${entryId}/submit`);
+  return response.data.data.entry;
+}
+
+export async function approveContractTimeEntry(id: string, entryId: string): Promise<NonNullable<Contract['timeEntries']>[number]> {
+  const response = await api.post<ApiResponse<{ entry: NonNullable<Contract['timeEntries']>[number] }>>(`/contracts/${id}/time-entries/${entryId}/approve`);
+  return response.data.data.entry;
+}
+
+export async function rejectContractTimeEntry(id: string, entryId: string, reason: string): Promise<NonNullable<Contract['timeEntries']>[number]> {
+  const response = await api.post<ApiResponse<{ entry: NonNullable<Contract['timeEntries']>[number] }>>(`/contracts/${id}/time-entries/${entryId}/reject`, { reason });
+  return response.data.data.entry;
+}
+
+export async function createContractMilestone(id: string, input: {
+  title: string;
+  description?: string | null;
+  dueDate?: string | null;
+  amount?: number | null;
+  percentage?: number | null;
+  sortOrder?: number;
+}): Promise<NonNullable<Contract['milestones']>[number]> {
+  const response = await api.post<ApiResponse<{ milestone: NonNullable<Contract['milestones']>[number] }>>(`/contracts/${id}/milestones`, input);
+  return response.data.data.milestone;
+}
+
+export async function approveContractMilestone(id: string, milestoneId: string): Promise<NonNullable<Contract['milestones']>[number]> {
+  const response = await api.post<ApiResponse<{ milestone: NonNullable<Contract['milestones']>[number] }>>(`/contracts/${id}/milestones/${milestoneId}/approve`);
+  return response.data.data.milestone;
+}
+
+export async function createContractBillingScheduleItem(id: string, input: {
+  label: string;
+  dueDate: string;
+  amount: number;
+  sortOrder?: number;
+}): Promise<NonNullable<Contract['billingScheduleItems']>[number]> {
+  const response = await api.post<ApiResponse<{ item: NonNullable<Contract['billingScheduleItems']>[number] }>>(`/contracts/${id}/billing-schedule`, input);
+  return response.data.data.item;
+}
+
+export async function generateContractInvoice(id: string, input: {
+  periodStart?: string | null;
+  periodEnd?: string | null;
+  milestoneId?: string;
+  scheduleItemId?: string;
+} = {}): Promise<{ id: string; invoiceNumber: string }> {
+  const response = await api.post<ApiResponse<{ invoice: { id: string; invoiceNumber: string } }>>(`/contracts/${id}/generate-invoice`, input);
+  return response.data.data.invoice;
+}
+
+export async function getPublicContract(token: string): Promise<Contract> {
+  const response = await authApi.get<ApiResponse<{ contract: Contract }>>(`/public/contracts/sign/${token}`);
+  return response.data.data.contract;
+}
+
+export async function signPublicContract(token: string, input: {
+  signerName: string;
+  signerEmail: string;
+  accepted: true;
+}): Promise<Contract> {
+  const response = await authApi.post<ApiResponse<{ contract: Contract }>>(`/public/contracts/sign/${token}`, input);
+  return response.data.data.contract;
 }
 
 export async function recordPayment(

@@ -245,69 +245,99 @@ enum AiToolRiskLevel {
 // ─── Models ──────────────────────────────────────────────────────────────────
 
 model User {
-  id           String    @id @default(uuid()) @db.Uuid
-  name         String    @db.VarChar(255)
-  email        String    @unique @db.VarChar(255)
-  passwordHash String    @map("password_hash") @db.VarChar(255)
-  role         Role      @default(EMPLOYEE)
-  rbacRoleId   String?   @map("rbac_role_id") @db.Uuid
-  themePreference String @default("light") @map("theme_preference") @db.VarChar(20)
-  isActive     Boolean   @default(true) @map("is_active")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
+  id                String             @id @default(uuid()) @db.Uuid
+  name              String             @db.VarChar(255)
+  email             String             @unique @db.VarChar(255)
+  passwordHash      String             @map("password_hash") @db.VarChar(255)
+  role              Role               @default(EMPLOYEE)
+  rbacRoleId        String?            @map("rbac_role_id") @db.Uuid
+  themePreference   String             @default("light") @map("theme_preference") @db.VarChar(20)
+  isActive          Boolean            @default(true) @map("is_active")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  telegramAccount   TelegramAccount?
+  telegramLinkCodes TelegramLinkCode[]
 
   // Relations
-  customers      Customer[]
-  invoices       Invoice[] @relation("InvoiceCreatedBy")
-  devis          Devis[] @relation("DevisCreatedBy")
-  signedInvoices Invoice[] @relation("InvoiceSignedBy")
-  signedDevis    Devis[] @relation("DevisSignedBy")
-  contractTimeEntries ContractTimeEntry[] @relation("ContractTimeEntryUser")
-  contractTimeEntriesCreated ContractTimeEntry[] @relation("ContractTimeEntryCreatedBy")
-  contractTimeEntriesApproved ContractTimeEntry[] @relation("ContractTimeEntryApprovedBy")
-  contractTimeEntriesSubmitted ContractTimeEntry[] @relation("ContractTimeEntrySubmittedBy")
-  contractTimeEntriesRejected ContractTimeEntry[] @relation("ContractTimeEntryRejectedBy")
-  vatOverrides   Invoice[] @relation("InvoiceVatOverriddenBy")
-  devisVatOverrides Devis[] @relation("DevisVatOverriddenBy")
-  payments       Payment[]
-  reminders      Reminder[]
-  invoiceEmailLogs InvoiceEmailLog[]
-  assignedClients UserClientAssignment[]
-  recurringPlans  RecurringPlan[]
-  expenseNotes     ExpenseNote[] @relation("ExpenseNoteCreatedBy")
-  approvedExpenseNotes ExpenseNote[] @relation("ExpenseNoteApprovedBy")
-  rejectedExpenseNotes ExpenseNote[] @relation("ExpenseNoteRejectedBy")
-  changesRequestedExpenseNotes ExpenseNote[] @relation("ExpenseNoteChangesRequestedBy")
-  paidExpenseNotes ExpenseNote[] @relation("ExpenseNotePaidBy")
-  expenseAttachments ExpenseAttachment[] @relation("ExpenseAttachmentUploadedBy")
-  expenseAIAnalyses ExpenseAIAnalysis[] @relation("ExpenseAIAnalysisRequestedBy")
-  expenseAuditLogs ExpenseAuditLog[] @relation("ExpenseAuditActor")
-  expenseEmailLogs ExpenseEmailLog[]
-  creditNotesCreated CreditNote[] @relation("CreditNoteCreatedBy")
-  creditNotesValidated CreditNote[] @relation("CreditNoteValidatedBy")
-  creditNotesCancelled CreditNote[] @relation("CreditNoteCancelledBy")
-  creditNotesRefunded CreditNote[] @relation("CreditNoteRefundedBy")
-  creditNoteAuditLogs CreditNoteAuditLog[] @relation("CreditNoteAuditActor")
-  creditNoteEmailLogs CreditNoteEmailLog[]
-  creditNoteReasonsCreated CreditNoteReason[]
-  contractsCreated Contract[] @relation("ContractCreatedBy")
-  contractsSent Contract[] @relation("ContractSentBy")
-  contractsCompanySigned Contract[] @relation("ContractCompanySignedBy")
-  contractVersionsCreated ContractVersion[] @relation("ContractVersionCreatedBy")
-  contractVersionsCompanySigned ContractVersion[] @relation("ContractVersionCompanySignedBy")
-  contractVersionsRevoked ContractVersion[] @relation("ContractVersionRevokedBy")
-  contractTemplatesCreated ContractTemplate[] @relation("ContractTemplateCreatedBy")
-  contractAuditLogs ContractAuditLog[] @relation("ContractAuditActor")
-  contractEmailLogs ContractEmailLog[]
-  contractMilestonesApproved ContractMilestone[] @relation("ContractMilestoneApprovedBy")
-  contractBillingJobs ContractBillingJob[]
-  auditLogs AuditLog[]
-  aiConversations AiConversation[]
-  aiPendingActions AiPendingAction[]
-  rbacRole       RbacRole? @relation(fields: [rbacRoleId], references: [id], onDelete: SetNull)
+  customers                     Customer[]
+  invoices                      Invoice[]              @relation("InvoiceCreatedBy")
+  devis                         Devis[]                @relation("DevisCreatedBy")
+  signedInvoices                Invoice[]              @relation("InvoiceSignedBy")
+  signedDevis                   Devis[]                @relation("DevisSignedBy")
+  contractTimeEntries           ContractTimeEntry[]    @relation("ContractTimeEntryUser")
+  contractTimeEntriesCreated    ContractTimeEntry[]    @relation("ContractTimeEntryCreatedBy")
+  contractTimeEntriesApproved   ContractTimeEntry[]    @relation("ContractTimeEntryApprovedBy")
+  contractTimeEntriesSubmitted  ContractTimeEntry[]    @relation("ContractTimeEntrySubmittedBy")
+  contractTimeEntriesRejected   ContractTimeEntry[]    @relation("ContractTimeEntryRejectedBy")
+  vatOverrides                  Invoice[]              @relation("InvoiceVatOverriddenBy")
+  devisVatOverrides             Devis[]                @relation("DevisVatOverriddenBy")
+  payments                      Payment[]
+  reminders                     Reminder[]
+  invoiceEmailLogs              InvoiceEmailLog[]
+  assignedClients               UserClientAssignment[]
+  recurringPlans                RecurringPlan[]
+  expenseNotes                  ExpenseNote[]          @relation("ExpenseNoteCreatedBy")
+  approvedExpenseNotes          ExpenseNote[]          @relation("ExpenseNoteApprovedBy")
+  rejectedExpenseNotes          ExpenseNote[]          @relation("ExpenseNoteRejectedBy")
+  changesRequestedExpenseNotes  ExpenseNote[]          @relation("ExpenseNoteChangesRequestedBy")
+  paidExpenseNotes              ExpenseNote[]          @relation("ExpenseNotePaidBy")
+  expenseAttachments            ExpenseAttachment[]    @relation("ExpenseAttachmentUploadedBy")
+  expenseAIAnalyses             ExpenseAIAnalysis[]    @relation("ExpenseAIAnalysisRequestedBy")
+  expenseAuditLogs              ExpenseAuditLog[]      @relation("ExpenseAuditActor")
+  expenseEmailLogs              ExpenseEmailLog[]
+  creditNotesCreated            CreditNote[]           @relation("CreditNoteCreatedBy")
+  creditNotesValidated          CreditNote[]           @relation("CreditNoteValidatedBy")
+  creditNotesCancelled          CreditNote[]           @relation("CreditNoteCancelledBy")
+  creditNotesRefunded           CreditNote[]           @relation("CreditNoteRefundedBy")
+  creditNoteAuditLogs           CreditNoteAuditLog[]   @relation("CreditNoteAuditActor")
+  creditNoteEmailLogs           CreditNoteEmailLog[]
+  creditNoteReasonsCreated      CreditNoteReason[]
+  contractsCreated              Contract[]             @relation("ContractCreatedBy")
+  contractsSent                 Contract[]             @relation("ContractSentBy")
+  contractsCompanySigned        Contract[]             @relation("ContractCompanySignedBy")
+  contractVersionsCreated       ContractVersion[]      @relation("ContractVersionCreatedBy")
+  contractVersionsCompanySigned ContractVersion[]      @relation("ContractVersionCompanySignedBy")
+  contractVersionsRevoked       ContractVersion[]      @relation("ContractVersionRevokedBy")
+  contractTemplatesCreated      ContractTemplate[]     @relation("ContractTemplateCreatedBy")
+  contractAuditLogs             ContractAuditLog[]     @relation("ContractAuditActor")
+  contractEmailLogs             ContractEmailLog[]
+  contractMilestonesApproved    ContractMilestone[]    @relation("ContractMilestoneApprovedBy")
+  contractBillingJobs           ContractBillingJob[]
+  auditLogs                     AuditLog[]
+  aiConversations               AiConversation[]
+  aiPendingActions              AiPendingAction[]
+  rbacRole                      RbacRole?              @relation(fields: [rbacRoleId], references: [id], onDelete: SetNull)
 
-  @@map("users")
   @@index([rbacRoleId])
+  @@map("users")
+}
+
+model TelegramAccount {
+  id             String   @id @default(uuid()) @db.Uuid
+  telegramUserId String   @unique @map("telegram_user_id") @db.VarChar(50)
+  telegramChatId String   @map("telegram_chat_id") @db.VarChar(50)
+  userId         String   @unique @map("user_id") @db.Uuid
+  linkedAt       DateTime @default(now()) @map("linked_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([telegramChatId])
+  @@map("telegram_accounts")
+}
+
+model TelegramLinkCode {
+  id        String    @id @default(uuid()) @db.Uuid
+  code      String    @unique @db.VarChar(32)
+  userId    String    @map("user_id") @db.Uuid
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("telegram_link_codes")
 }
 
 model AuditLog {
@@ -336,7 +366,6 @@ model AuditLog {
 
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
-  @@map("audit_logs")
   @@index([userId])
   @@index([module])
   @@index([entity])
@@ -344,6 +373,7 @@ model AuditLog {
   @@index([action])
   @@index([createdAt])
   @@index([module, entity, entityId])
+  @@map("audit_logs")
 }
 
 model AiConversation {
@@ -359,9 +389,9 @@ model AiConversation {
   messages       AiMessage[]
   pendingActions AiPendingAction[]
 
-  @@map("ai_conversations")
   @@index([userId, createdAt])
   @@index([status])
+  @@map("ai_conversations")
 }
 
 model AiMessage {
@@ -377,9 +407,9 @@ model AiMessage {
 
   conversation AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
-  @@map("ai_messages")
   @@index([conversationId, createdAt])
   @@index([toolName])
+  @@map("ai_messages")
 }
 
 model AiPendingAction {
@@ -405,55 +435,54 @@ model AiPendingAction {
   user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   conversation AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
-  @@map("ai_pending_actions")
   @@index([userId, status, expiresAt])
   @@index([conversationId])
   @@index([toolName])
+  @@map("ai_pending_actions")
 }
 
 model RbacRole {
-  id          String           @id @default(uuid()) @db.Uuid
-  name        String           @unique @db.VarChar(100)
-  description String?          @db.VarChar(500)
-  isSystem    Boolean          @default(false) @map("is_system")
-  createdAt   DateTime         @default(now()) @map("created_at")
-  updatedAt   DateTime         @updatedAt @map("updated_at")
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique @db.VarChar(100)
+  description String?  @db.VarChar(500)
+  isSystem    Boolean  @default(false) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
-  users         User[]
-  permissions   RolePermission[]
+  users       User[]
+  permissions RolePermission[]
 
   @@map("roles")
 }
 
 model Permission {
-  id          String           @id @default(uuid()) @db.Uuid
-  key         String           @unique @db.VarChar(120)
-  description String?          @db.VarChar(500)
-  resource    String           @db.VarChar(80)
-  action      String           @db.VarChar(80)
-  createdAt   DateTime         @default(now()) @map("created_at")
-  updatedAt   DateTime         @updatedAt @map("updated_at")
+  id          String   @id @default(uuid()) @db.Uuid
+  key         String   @unique @db.VarChar(120)
+  description String?  @db.VarChar(500)
+  resource    String   @db.VarChar(80)
+  action      String   @db.VarChar(80)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   roles RolePermission[]
 
-  @@map("permissions")
   @@index([resource])
+  @@map("permissions")
 }
 
 model RolePermission {
-  roleId       String     @map("role_id") @db.Uuid
-  permissionId String     @map("permission_id") @db.Uuid
+  roleId       String          @map("role_id") @db.Uuid
+  permissionId String          @map("permission_id") @db.Uuid
   scope        PermissionScope @default(ALL)
-  assignedAt   DateTime   @default(now()) @map("assigned_at")
+  assignedAt   DateTime        @default(now()) @map("assigned_at")
 
   role       RbacRole   @relation(fields: [roleId], references: [id], onDelete: Cascade)
   permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
   @@id([roleId, permissionId])
-  @@map("role_permissions")
   @@index([permissionId])
+  @@map("role_permissions")
 }
-
 
 model UserClientAssignment {
   id         String   @id @default(uuid()) @db.Uuid
@@ -488,17 +517,17 @@ model Customer {
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   // Relations
-  createdBy   User      @relation(fields: [createdById], references: [id], onDelete: Restrict)
-  invoices    Invoice[]
-  devis       Devis[]
-  creditNotes CreditNote[]
-  contracts   Contract[]
-  assignedUsers UserClientAssignment[]
+  createdBy      User                   @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  invoices       Invoice[]
+  devis          Devis[]
+  creditNotes    CreditNote[]
+  contracts      Contract[]
+  assignedUsers  UserClientAssignment[]
   recurringPlans RecurringPlan[]
 
-  @@map("customers")
   @@index([email])
   @@index([name])
+  @@map("customers")
 }
 
 model Invoice {
@@ -509,69 +538,71 @@ model Invoice {
   status        InvoiceStatus @default(DRAFT)
   issueDate     DateTime      @map("issue_date") @db.Date
   dueDate       DateTime      @map("due_date") @db.Date
-  
+
   // Monetary values stored as Decimal to prevent floating point inaccuracies
-  subtotal      Decimal       @db.Decimal(12, 2)
-  taxRate       Decimal       @default(0) @map("tax_rate") @db.Decimal(5, 2)
-  taxAmount     Decimal       @default(0) @map("tax_amount") @db.Decimal(12, 2)
-  customerCountry     String  @default("Morocco") @map("customer_country") @db.VarChar(100)
-  customerCountryCode String  @default("MA") @map("customer_country_code") @db.VarChar(2)
-  vatOverridden       Boolean @default(false) @map("vat_overridden")
-  vatOverrideReason   String? @map("vat_override_reason") @db.VarChar(500)
+  subtotal            Decimal   @db.Decimal(12, 2)
+  taxRate             Decimal   @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  taxAmount           Decimal   @default(0) @map("tax_amount") @db.Decimal(12, 2)
+  customerCountry     String    @default("Morocco") @map("customer_country") @db.VarChar(100)
+  customerCountryCode String    @default("MA") @map("customer_country_code") @db.VarChar(2)
+  vatOverridden       Boolean   @default(false) @map("vat_overridden")
+  vatOverrideReason   String?   @map("vat_override_reason") @db.VarChar(500)
   vatOverriddenAt     DateTime? @map("vat_overridden_at")
-  vatOverriddenById   String? @map("vat_overridden_by") @db.Uuid
-  discount      Decimal       @default(0) @db.Decimal(12, 2)
-  total         Decimal       @db.Decimal(12, 2)
-  
+  vatOverriddenById   String?   @map("vat_overridden_by") @db.Uuid
+  discount            Decimal   @default(0) @db.Decimal(12, 2)
+  total               Decimal   @db.Decimal(12, 2)
+
   // Denormalized totals for quick dashboard queries
-  amountPaid    Decimal       @default(0) @map("amount_paid") @db.Decimal(12, 2)
-  balanceDue    Decimal       @map("balance_due") @db.Decimal(12, 2)
-  
-  notes         String?       @db.Text
-  terms         String?       @db.Text
-  currency      String        @default("MAD") @db.VarChar(10)
-  
-  sentAt        DateTime?     @map("sent_at")
-  paidAt        DateTime?     @map("paid_at")
-  isSigned      Boolean       @default(false) @map("is_signed")
-  signedAt      DateTime?     @map("signed_at")
-  signedById    String?       @map("signed_by") @db.Uuid
-  signatureUrl  String?       @map("signature_url") @db.VarChar(500)
-  stampUrl      String?       @map("stamp_url") @db.VarChar(500)
-  sourceDevisId String?       @unique @map("source_devis_id") @db.Uuid
-  contractId    String?       @map("contract_id") @db.Uuid
-  contractVersionId String?   @map("contract_version_id") @db.Uuid
-  billingPeriodStart DateTime? @map("billing_period_start") @db.Date
-  billingPeriodEnd   DateTime? @map("billing_period_end") @db.Date
-  contractBillingScheduleItemId String? @map("contract_billing_schedule_item_id") @db.Uuid
-  contractMilestoneId String? @map("contract_milestone_id") @db.Uuid
-  createdAt     DateTime      @default(now()) @map("created_at")
-  updatedAt     DateTime      @updatedAt @map("updated_at")
+  amountPaid Decimal @default(0) @map("amount_paid") @db.Decimal(12, 2)
+  balanceDue Decimal @map("balance_due") @db.Decimal(12, 2)
+
+  notes    String? @db.Text
+  terms    String? @db.Text
+  currency String  @default("MAD") @db.VarChar(10)
+
+  sentAt                        DateTime? @map("sent_at")
+  paidAt                        DateTime? @map("paid_at")
+  isSigned                      Boolean   @default(false) @map("is_signed")
+  signedAt                      DateTime? @map("signed_at")
+  signedById                    String?   @map("signed_by") @db.Uuid
+  signatureUrl                  String?   @map("signature_url") @db.VarChar(500)
+  stampUrl                      String?   @map("stamp_url") @db.VarChar(500)
+  sourceDevisId                 String?   @unique @map("source_devis_id") @db.Uuid
+  contractId                    String?   @map("contract_id") @db.Uuid
+  contractVersionId             String?   @map("contract_version_id") @db.Uuid
+  billingPeriodStart            DateTime? @map("billing_period_start") @db.Date
+  billingPeriodEnd              DateTime? @map("billing_period_end") @db.Date
+  contractBillingScheduleItemId String?   @map("contract_billing_schedule_item_id") @db.Uuid
+  contractMilestoneId           String?   @map("contract_milestone_id") @db.Uuid
+  createdAt                     DateTime  @default(now()) @map("created_at")
+  updatedAt                     DateTime  @updatedAt @map("updated_at")
 
   // Relations
-  customer      Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  createdBy     User          @relation("InvoiceCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  signedBy      User?         @relation("InvoiceSignedBy", fields: [signedById], references: [id], onDelete: SetNull)
-  vatOverriddenBy User?       @relation("InvoiceVatOverriddenBy", fields: [vatOverriddenById], references: [id], onDelete: SetNull)
-  items         InvoiceItem[]
-  payments      Payment[]
-  reminders     Reminder[]
-  emailLogs     InvoiceEmailLog[]
-  creditNotes   CreditNote[]
-  recurringExecutions RecurringExecution[]
-  recurringPlanId String?       @map("recurring_plan_id") @db.Uuid
-  recurringPlan   RecurringPlan? @relation(fields: [recurringPlanId], references: [id], onDelete: SetNull)
-  sourceDevis      Devis?        @relation("DevisToInvoice", fields: [sourceDevisId], references: [id], onDelete: SetNull)
-  contract         Contract?     @relation("ContractInvoices", fields: [contractId], references: [id], onDelete: SetNull)
-  contractVersion  ContractVersion? @relation("ContractVersionInvoices", fields: [contractVersionId], references: [id], onDelete: SetNull)
-  contractBillingScheduleItem ContractBillingScheduleItem? @relation("InvoiceContractBillingScheduleItem", fields: [contractBillingScheduleItemId], references: [id], onDelete: SetNull)
-  contractMilestone ContractMilestone? @relation("InvoiceContractMilestone", fields: [contractMilestoneId], references: [id], onDelete: SetNull)
-  contractTimeEntries ContractTimeEntry[] @relation("ContractTimeEntryInvoice")
-  contractBillingJobs ContractBillingJob[] @relation("ContractBillingJobInvoice")
-  contractMilestonePrimaryFor ContractMilestone? @relation("ContractMilestonePrimaryInvoice")
+  customer                          Customer                     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  createdBy                         User                         @relation("InvoiceCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  signedBy                          User?                        @relation("InvoiceSignedBy", fields: [signedById], references: [id], onDelete: SetNull)
+  vatOverriddenBy                   User?                        @relation("InvoiceVatOverriddenBy", fields: [vatOverriddenById], references: [id], onDelete: SetNull)
+  items                             InvoiceItem[]
+  payments                          Payment[]
+  reminders                         Reminder[]
+  emailLogs                         InvoiceEmailLog[]
+  creditNotes                       CreditNote[]
+  recurringExecutions               RecurringExecution[]
+  recurringPlanId                   String?                      @map("recurring_plan_id") @db.Uuid
+  recurringPlan                     RecurringPlan?               @relation(fields: [recurringPlanId], references: [id], onDelete: SetNull)
+  sourceDevis                       Devis?                       @relation("DevisToInvoice", fields: [sourceDevisId], references: [id], onDelete: SetNull)
+  contract                          Contract?                    @relation("ContractInvoices", fields: [contractId], references: [id], onDelete: SetNull)
+  contractVersion                   ContractVersion?             @relation("ContractVersionInvoices", fields: [contractVersionId], references: [id], onDelete: SetNull)
+  contractBillingScheduleItem       ContractBillingScheduleItem? @relation("InvoiceContractBillingScheduleItem", fields: [contractBillingScheduleItemId], references: [id], onDelete: SetNull)
+  contractMilestone                 ContractMilestone?           @relation("InvoiceContractMilestone", fields: [contractMilestoneId], references: [id], onDelete: SetNull)
+  contractTimeEntries               ContractTimeEntry[]          @relation("ContractTimeEntryInvoice")
+  contractBillingJobs               ContractBillingJob[]         @relation("ContractBillingJobInvoice")
+  contractMilestonePrimaryFor       ContractMilestone?           @relation("ContractMilestonePrimaryInvoice")
   contractBillingSchedulePrimaryFor ContractBillingScheduleItem? @relation("ContractBillingSchedulePrimaryInvoice")
 
-  @@map("invoices")
+  @@unique([contractId, billingPeriodStart, billingPeriodEnd])
+  @@unique([contractBillingScheduleItemId])
+  @@unique([contractMilestoneId])
   @@index([invoiceNumber])
   @@index([status])
   @@index([issueDate])
@@ -583,55 +614,52 @@ model Invoice {
   @@index([contractId])
   @@index([contractVersionId])
   @@index([billingPeriodStart, billingPeriodEnd])
-  @@unique([contractId, billingPeriodStart, billingPeriodEnd])
-  @@unique([contractBillingScheduleItemId])
-  @@unique([contractMilestoneId])
+  @@map("invoices")
 }
 
 model Devis {
-  id            String      @id @default(uuid()) @db.Uuid
-  devisNumber   String      @unique @map("devis_number") @db.VarChar(50)
-  companyId     Int         @default(1) @map("company_id")
-  customerId    String      @map("customer_id") @db.Uuid
-  createdById   String      @map("created_by") @db.Uuid
-  status        DevisStatus @default(DRAFT)
-  issueDate     DateTime    @map("issue_date") @db.Date
-  validUntil    DateTime    @map("valid_until") @db.Date
-  subtotal      Decimal     @db.Decimal(12, 2)
-  taxRate       Decimal     @default(0) @map("tax_rate") @db.Decimal(5, 2)
-  taxAmount     Decimal     @default(0) @map("tax_amount") @db.Decimal(12, 2)
-  customerCountry     String  @default("Morocco") @map("customer_country") @db.VarChar(100)
-  customerCountryCode String  @default("MA") @map("customer_country_code") @db.VarChar(2)
-  vatOverridden       Boolean @default(false) @map("vat_overridden")
-  vatOverrideReason   String? @map("vat_override_reason") @db.VarChar(500)
-  vatOverriddenAt     DateTime? @map("vat_overridden_at")
-  vatOverriddenById   String? @map("vat_overridden_by") @db.Uuid
-  discount      Decimal     @default(0) @db.Decimal(12, 2)
-  total         Decimal     @db.Decimal(12, 2)
-  notes         String?     @db.Text
-  terms         String?     @db.Text
-  currency      String      @default("MAD") @db.VarChar(10)
-  sentAt        DateTime?   @map("sent_at")
-  approvedAt    DateTime?   @map("approved_at")
-  rejectedAt    DateTime?   @map("rejected_at")
-  convertedAt   DateTime?   @map("converted_at")
-  isSigned      Boolean     @default(false) @map("is_signed")
-  signedAt      DateTime?   @map("signed_at")
-  signedById    String?     @map("signed_by") @db.Uuid
-  signatureUrl  String?     @map("signature_url") @db.VarChar(500)
-  stampUrl      String?     @map("stamp_url") @db.VarChar(500)
-  createdAt     DateTime    @default(now()) @map("created_at")
-  updatedAt     DateTime    @updatedAt @map("updated_at")
+  id                  String      @id @default(uuid()) @db.Uuid
+  devisNumber         String      @unique @map("devis_number") @db.VarChar(50)
+  companyId           Int         @default(1) @map("company_id")
+  customerId          String      @map("customer_id") @db.Uuid
+  createdById         String      @map("created_by") @db.Uuid
+  status              DevisStatus @default(DRAFT)
+  issueDate           DateTime    @map("issue_date") @db.Date
+  validUntil          DateTime    @map("valid_until") @db.Date
+  subtotal            Decimal     @db.Decimal(12, 2)
+  taxRate             Decimal     @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  taxAmount           Decimal     @default(0) @map("tax_amount") @db.Decimal(12, 2)
+  customerCountry     String      @default("Morocco") @map("customer_country") @db.VarChar(100)
+  customerCountryCode String      @default("MA") @map("customer_country_code") @db.VarChar(2)
+  vatOverridden       Boolean     @default(false) @map("vat_overridden")
+  vatOverrideReason   String?     @map("vat_override_reason") @db.VarChar(500)
+  vatOverriddenAt     DateTime?   @map("vat_overridden_at")
+  vatOverriddenById   String?     @map("vat_overridden_by") @db.Uuid
+  discount            Decimal     @default(0) @db.Decimal(12, 2)
+  total               Decimal     @db.Decimal(12, 2)
+  notes               String?     @db.Text
+  terms               String?     @db.Text
+  currency            String      @default("MAD") @db.VarChar(10)
+  sentAt              DateTime?   @map("sent_at")
+  approvedAt          DateTime?   @map("approved_at")
+  rejectedAt          DateTime?   @map("rejected_at")
+  convertedAt         DateTime?   @map("converted_at")
+  isSigned            Boolean     @default(false) @map("is_signed")
+  signedAt            DateTime?   @map("signed_at")
+  signedById          String?     @map("signed_by") @db.Uuid
+  signatureUrl        String?     @map("signature_url") @db.VarChar(500)
+  stampUrl            String?     @map("stamp_url") @db.VarChar(500)
+  createdAt           DateTime    @default(now()) @map("created_at")
+  updatedAt           DateTime    @updatedAt @map("updated_at")
 
-  company        CompanySettings @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  customer       Customer        @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  createdBy      User            @relation("DevisCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  signedBy       User?           @relation("DevisSignedBy", fields: [signedById], references: [id], onDelete: SetNull)
-  vatOverriddenBy User?          @relation("DevisVatOverriddenBy", fields: [vatOverriddenById], references: [id], onDelete: SetNull)
-  items          DevisItem[]
-  generatedInvoice Invoice?      @relation("DevisToInvoice")
+  company          CompanySettings @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  customer         Customer        @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  createdBy        User            @relation("DevisCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  signedBy         User?           @relation("DevisSignedBy", fields: [signedById], references: [id], onDelete: SetNull)
+  vatOverriddenBy  User?           @relation("DevisVatOverriddenBy", fields: [vatOverriddenById], references: [id], onDelete: SetNull)
+  items            DevisItem[]
+  generatedInvoice Invoice?        @relation("DevisToInvoice")
 
-  @@map("devis")
   @@index([devisNumber])
   @@index([status])
   @@index([issueDate])
@@ -640,47 +668,48 @@ model Devis {
   @@index([createdById])
   @@index([signedById])
   @@index([vatOverriddenById])
+  @@map("devis")
 }
 
 model DevisItem {
-  id          String   @id @default(uuid()) @db.Uuid
-  devisId     String   @map("devis_id") @db.Uuid
-  description String   @db.Text
-  unit        String?  @db.VarChar(50)
-  quantity    Decimal  @db.Decimal(12, 2)
-  unitPrice   Decimal  @map("unit_price") @db.Decimal(12, 2)
-  discount    Decimal  @default(0) @db.Decimal(12, 2)
-  taxRate     Decimal  @default(0) @map("tax_rate") @db.Decimal(5, 2)
-  lineTotal   Decimal  @map("line_total") @db.Decimal(12, 2)
-  sortOrder   Int      @default(0) @map("sort_order")
+  id          String  @id @default(uuid()) @db.Uuid
+  devisId     String  @map("devis_id") @db.Uuid
+  description String  @db.Text
+  unit        String? @db.VarChar(50)
+  quantity    Decimal @db.Decimal(12, 2)
+  unitPrice   Decimal @map("unit_price") @db.Decimal(12, 2)
+  discount    Decimal @default(0) @db.Decimal(12, 2)
+  taxRate     Decimal @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  lineTotal   Decimal @map("line_total") @db.Decimal(12, 2)
+  sortOrder   Int     @default(0) @map("sort_order")
 
-  devis       Devis    @relation(fields: [devisId], references: [id], onDelete: Cascade)
+  devis Devis @relation(fields: [devisId], references: [id], onDelete: Cascade)
 
-  @@map("devis_items")
   @@index([devisId])
+  @@map("devis_items")
 }
 
 model InvoiceEmailLog {
-  id             String    @id @default(uuid()) @db.Uuid
-  invoiceId      String    @map("invoice_id") @db.Uuid
-  sentById       String?   @map("sent_by") @db.Uuid
-  recipientEmail String    @map("recipient_email") @db.VarChar(255)
-  subject        String    @db.VarChar(255)
-  message        String    @db.Text
-  status         String    @db.VarChar(30)
-  deliveryMode   String?   @map("delivery_mode") @db.VarChar(30)
-  messageId      String?   @map("message_id") @db.VarChar(255)
-  filePath       String?   @map("file_path") @db.VarChar(1000)
-  errorMessage   String?   @map("error_message") @db.Text
-  createdAt      DateTime  @default(now()) @map("created_at")
+  id             String   @id @default(uuid()) @db.Uuid
+  invoiceId      String   @map("invoice_id") @db.Uuid
+  sentById       String?  @map("sent_by") @db.Uuid
+  recipientEmail String   @map("recipient_email") @db.VarChar(255)
+  subject        String   @db.VarChar(255)
+  message        String   @db.Text
+  status         String   @db.VarChar(30)
+  deliveryMode   String?  @map("delivery_mode") @db.VarChar(30)
+  messageId      String?  @map("message_id") @db.VarChar(255)
+  filePath       String?  @map("file_path") @db.VarChar(1000)
+  errorMessage   String?  @map("error_message") @db.Text
+  createdAt      DateTime @default(now()) @map("created_at")
 
-  invoice        Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  sentBy         User?     @relation(fields: [sentById], references: [id], onDelete: SetNull)
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  sentBy  User?   @relation(fields: [sentById], references: [id], onDelete: SetNull)
 
-  @@map("invoice_email_logs")
   @@index([invoiceId])
   @@index([status])
   @@index([createdAt])
+  @@map("invoice_email_logs")
 }
 
 model InvoiceSequence {
@@ -725,7 +754,7 @@ model CompanySettings {
   bankDetails     String?  @map("bank_details") @db.Text
   updatedAt       DateTime @updatedAt @map("updated_at")
 
-  devis           Devis[]
+  devis Devis[]
 
   @@map("company_settings")
 }
@@ -741,9 +770,9 @@ model Product {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  @@map("products")
   @@index([name])
   @@index([isActive])
+  @@map("products")
 }
 
 model ExpenseCategory {
@@ -756,8 +785,8 @@ model ExpenseCategory {
   expenseTypes ExpenseType[]
   expenseNotes ExpenseNote[]
 
-  @@map("expense_categories")
   @@index([active])
+  @@map("expense_categories")
 }
 
 model ExpenseType {
@@ -772,57 +801,56 @@ model ExpenseType {
   expenseNotes ExpenseNote[]
 
   @@unique([categoryId, name])
-  @@map("expense_types")
   @@index([categoryId])
   @@index([active])
+  @@map("expense_types")
 }
 
 model ExpenseNote {
-  id             String        @id @default(uuid()) @db.Uuid
-  categoryId     String        @map("category_id") @db.Uuid
-  expenseTypeId  String        @map("expense_type_id") @db.Uuid
-  createdById    String        @map("created_by") @db.Uuid
-  status         ExpenseNoteStatus @default(DRAFT)
-  expenseDate    DateTime      @map("expense_date") @db.Date
-  amountTTC      Decimal       @map("amount_ttc") @db.Decimal(12, 2)
-  amountHT       Decimal?      @map("amount_ht") @db.Decimal(12, 2)
-  vatAmount      Decimal       @default(0) @map("vat_amount") @db.Decimal(12, 2)
-  vatRate        Decimal       @default(0) @map("vat_rate") @db.Decimal(5, 2)
-  comment        String?       @db.Text
-  merchantName   String?       @map("merchant_name") @db.VarChar(255)
-  receiptNumber  String?       @map("receipt_number") @db.VarChar(255)
-  documentNumber String?       @map("document_number") @db.VarChar(255)
-  currency       String        @default("MAD") @db.VarChar(10)
-  aiConfidence   Decimal?      @map("ai_confidence") @db.Decimal(5, 4)
-  aiWarnings     Json?         @map("ai_warnings")
-  source         ExpenseSource @default(MANUAL)
-  submittedAt    DateTime?     @map("submitted_at")
-  approvedById   String?       @map("approved_by") @db.Uuid
-  approvedAt     DateTime?     @map("approved_at")
-  rejectedById   String?       @map("rejected_by") @db.Uuid
-  rejectedAt     DateTime?     @map("rejected_at")
-  rejectionReason String?      @map("rejection_reason") @db.Text
-  changesRequestedById String? @map("changes_requested_by") @db.Uuid
-  changesRequestedAt DateTime? @map("changes_requested_at")
-  changesRequestedReason String? @map("changes_requested_reason") @db.Text
-  paidById       String?       @map("paid_by") @db.Uuid
-  paidAt         DateTime?     @map("paid_at")
-  createdAt      DateTime      @default(now()) @map("created_at")
-  updatedAt      DateTime      @updatedAt @map("updated_at")
+  id                     String            @id @default(uuid()) @db.Uuid
+  categoryId             String            @map("category_id") @db.Uuid
+  expenseTypeId          String            @map("expense_type_id") @db.Uuid
+  createdById            String            @map("created_by") @db.Uuid
+  status                 ExpenseNoteStatus @default(DRAFT)
+  expenseDate            DateTime          @map("expense_date") @db.Date
+  amountTTC              Decimal           @map("amount_ttc") @db.Decimal(12, 2)
+  amountHT               Decimal?          @map("amount_ht") @db.Decimal(12, 2)
+  vatAmount              Decimal           @default(0) @map("vat_amount") @db.Decimal(12, 2)
+  vatRate                Decimal           @default(0) @map("vat_rate") @db.Decimal(5, 2)
+  comment                String?           @db.Text
+  merchantName           String?           @map("merchant_name") @db.VarChar(255)
+  receiptNumber          String?           @map("receipt_number") @db.VarChar(255)
+  documentNumber         String?           @map("document_number") @db.VarChar(255)
+  currency               String            @default("MAD") @db.VarChar(10)
+  aiConfidence           Decimal?          @map("ai_confidence") @db.Decimal(5, 4)
+  aiWarnings             Json?             @map("ai_warnings")
+  source                 ExpenseSource     @default(MANUAL)
+  submittedAt            DateTime?         @map("submitted_at")
+  approvedById           String?           @map("approved_by") @db.Uuid
+  approvedAt             DateTime?         @map("approved_at")
+  rejectedById           String?           @map("rejected_by") @db.Uuid
+  rejectedAt             DateTime?         @map("rejected_at")
+  rejectionReason        String?           @map("rejection_reason") @db.Text
+  changesRequestedById   String?           @map("changes_requested_by") @db.Uuid
+  changesRequestedAt     DateTime?         @map("changes_requested_at")
+  changesRequestedReason String?           @map("changes_requested_reason") @db.Text
+  paidById               String?           @map("paid_by") @db.Uuid
+  paidAt                 DateTime?         @map("paid_at")
+  createdAt              DateTime          @default(now()) @map("created_at")
+  updatedAt              DateTime          @updatedAt @map("updated_at")
 
-  category     ExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  expenseType  ExpenseType     @relation(fields: [expenseTypeId], references: [id], onDelete: Restrict)
-  createdBy    User            @relation("ExpenseNoteCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  approvedBy   User?           @relation("ExpenseNoteApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
-  rejectedBy   User?           @relation("ExpenseNoteRejectedBy", fields: [rejectedById], references: [id], onDelete: SetNull)
-  changesRequestedBy User?     @relation("ExpenseNoteChangesRequestedBy", fields: [changesRequestedById], references: [id], onDelete: SetNull)
-  paidBy       User?           @relation("ExpenseNotePaidBy", fields: [paidById], references: [id], onDelete: SetNull)
-  attachments  ExpenseAttachment[]
-  aiAnalyses   ExpenseAIAnalysis[]
-  auditLogs    ExpenseAuditLog[]
-  emailLogs    ExpenseEmailLog[]
+  category           ExpenseCategory     @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  expenseType        ExpenseType         @relation(fields: [expenseTypeId], references: [id], onDelete: Restrict)
+  createdBy          User                @relation("ExpenseNoteCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedBy         User?               @relation("ExpenseNoteApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  rejectedBy         User?               @relation("ExpenseNoteRejectedBy", fields: [rejectedById], references: [id], onDelete: SetNull)
+  changesRequestedBy User?               @relation("ExpenseNoteChangesRequestedBy", fields: [changesRequestedById], references: [id], onDelete: SetNull)
+  paidBy             User?               @relation("ExpenseNotePaidBy", fields: [paidById], references: [id], onDelete: SetNull)
+  attachments        ExpenseAttachment[]
+  aiAnalyses         ExpenseAIAnalysis[]
+  auditLogs          ExpenseAuditLog[]
+  emailLogs          ExpenseEmailLog[]
 
-  @@map("expense_notes")
   @@index([categoryId])
   @@index([expenseTypeId])
   @@index([createdById])
@@ -834,6 +862,7 @@ model ExpenseNote {
   @@index([rejectedById])
   @@index([changesRequestedById])
   @@index([paidById])
+  @@map("expense_notes")
 }
 
 model ExpenseAttachment {
@@ -848,13 +877,13 @@ model ExpenseAttachment {
   fileUrl       String   @map("file_url") @db.VarChar(500)
   createdAt     DateTime @default(now()) @map("created_at")
 
-  expenseNote ExpenseNote? @relation(fields: [expenseNoteId], references: [id], onDelete: SetNull)
-  uploadedBy  User         @relation("ExpenseAttachmentUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
+  expenseNote ExpenseNote?        @relation(fields: [expenseNoteId], references: [id], onDelete: SetNull)
+  uploadedBy  User                @relation("ExpenseAttachmentUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
   aiAnalyses  ExpenseAIAnalysis[]
 
-  @@map("expense_attachments")
   @@index([expenseNoteId])
   @@index([uploadedById])
+  @@map("expense_attachments")
 }
 
 model ExpenseAIAnalysis {
@@ -881,11 +910,11 @@ model ExpenseAIAnalysis {
   expenseNote ExpenseNote?      @relation(fields: [expenseNoteId], references: [id], onDelete: SetNull)
   requestedBy User              @relation("ExpenseAIAnalysisRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
 
-  @@map("expense_ai_analyses")
   @@index([attachmentId])
   @@index([expenseNoteId])
   @@index([requestedById])
   @@index([status])
+  @@map("expense_ai_analyses")
 }
 
 model ExpenseAuditLog {
@@ -901,11 +930,11 @@ model ExpenseAuditLog {
   expenseNote ExpenseNote @relation(fields: [expenseNoteId], references: [id], onDelete: Cascade)
   actor       User        @relation("ExpenseAuditActor", fields: [actorId], references: [id], onDelete: Restrict)
 
-  @@map("expense_audit_logs")
   @@index([expenseNoteId])
   @@index([actorId])
   @@index([action])
   @@index([createdAt])
+  @@map("expense_audit_logs")
 }
 
 model ExpenseEmailLog {
@@ -929,71 +958,70 @@ model ExpenseEmailLog {
   expenseNote ExpenseNote @relation(fields: [expenseNoteId], references: [id], onDelete: Cascade)
   sentBy      User?       @relation(fields: [sentById], references: [id], onDelete: SetNull)
 
-  @@map("expense_email_logs")
   @@index([expenseNoteId])
   @@index([status])
   @@index([createdAt])
+  @@map("expense_email_logs")
 }
 
 model InvoiceItem {
-  id          String   @id @default(uuid()) @db.Uuid
-  invoiceId   String   @map("invoice_id") @db.Uuid
-  description String   @db.Text
-  unit        String?  @db.VarChar(50)
-  quantity    Decimal  @db.Decimal(12, 2)
-  unitPrice   Decimal  @map("unit_price") @db.Decimal(12, 2)
-  taxRate     Decimal  @default(0) @map("tax_rate") @db.Decimal(5, 2)
-  total       Decimal  @db.Decimal(12, 2)
-  sortOrder   Int      @default(0) @map("sort_order")
+  id          String  @id @default(uuid()) @db.Uuid
+  invoiceId   String  @map("invoice_id") @db.Uuid
+  description String  @db.Text
+  unit        String? @db.VarChar(50)
+  quantity    Decimal @db.Decimal(12, 2)
+  unitPrice   Decimal @map("unit_price") @db.Decimal(12, 2)
+  taxRate     Decimal @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  total       Decimal @db.Decimal(12, 2)
+  sortOrder   Int     @default(0) @map("sort_order")
 
   // Relations
-  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoice         Invoice          @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   creditNoteLines CreditNoteLine[]
 
   @@map("invoice_items")
 }
 
 model CreditNote {
-  id               String                 @id @default(uuid()) @db.Uuid
-  creditNoteNumber String                 @unique @map("credit_note_number") @db.VarChar(50)
-  invoiceId        String                 @map("invoice_id") @db.Uuid
-  customerId       String                 @map("customer_id") @db.Uuid
-  createdById      String                 @map("created_by") @db.Uuid
-  validatedById    String?                @map("validated_by") @db.Uuid
-  cancelledById    String?                @map("cancelled_by") @db.Uuid
-  refundedById     String?                @map("refunded_by") @db.Uuid
-  type             CreditNoteType         @default(PARTIAL)
-  status           CreditNoteStatus       @default(DRAFT)
-  issueDate        DateTime               @map("issue_date") @db.Date
-  reasonId         String                 @map("reason_id") @db.Uuid
-  reasonCodeSnapshot String               @default("OTHER") @map("reason_code_snapshot") @db.VarChar(80)
-  reasonNameSnapshot Json                 @default("{}") @map("reason_name_snapshot")
-  reason           String                 @db.Text
-  internalComment  String?                @map("internal_comment") @db.Text
-  subtotal         Decimal                @db.Decimal(12, 2)
-  taxAmount        Decimal                @default(0) @map("tax_amount") @db.Decimal(12, 2)
-  total            Decimal                @db.Decimal(12, 2)
-  currency         String                 @default("MAD") @db.VarChar(10)
-  refundedAmount   Decimal                @default(0) @map("refunded_amount") @db.Decimal(12, 2)
-  refundStatus     CreditNoteRefundStatus @default(NOT_REFUNDED) @map("refund_status")
-  validatedAt      DateTime?              @map("validated_at")
-  cancelledAt      DateTime?              @map("cancelled_at")
-  refundedAt       DateTime?              @map("refunded_at")
-  createdAt        DateTime               @default(now()) @map("created_at")
-  updatedAt        DateTime               @updatedAt @map("updated_at")
+  id                 String                 @id @default(uuid()) @db.Uuid
+  creditNoteNumber   String                 @unique @map("credit_note_number") @db.VarChar(50)
+  invoiceId          String                 @map("invoice_id") @db.Uuid
+  customerId         String                 @map("customer_id") @db.Uuid
+  createdById        String                 @map("created_by") @db.Uuid
+  validatedById      String?                @map("validated_by") @db.Uuid
+  cancelledById      String?                @map("cancelled_by") @db.Uuid
+  refundedById       String?                @map("refunded_by") @db.Uuid
+  type               CreditNoteType         @default(PARTIAL)
+  status             CreditNoteStatus       @default(DRAFT)
+  issueDate          DateTime               @map("issue_date") @db.Date
+  reasonId           String                 @map("reason_id") @db.Uuid
+  reasonCodeSnapshot String                 @default("OTHER") @map("reason_code_snapshot") @db.VarChar(80)
+  reasonNameSnapshot Json                   @default("{}") @map("reason_name_snapshot")
+  reason             String                 @db.Text
+  internalComment    String?                @map("internal_comment") @db.Text
+  subtotal           Decimal                @db.Decimal(12, 2)
+  taxAmount          Decimal                @default(0) @map("tax_amount") @db.Decimal(12, 2)
+  total              Decimal                @db.Decimal(12, 2)
+  currency           String                 @default("MAD") @db.VarChar(10)
+  refundedAmount     Decimal                @default(0) @map("refunded_amount") @db.Decimal(12, 2)
+  refundStatus       CreditNoteRefundStatus @default(NOT_REFUNDED) @map("refund_status")
+  validatedAt        DateTime?              @map("validated_at")
+  cancelledAt        DateTime?              @map("cancelled_at")
+  refundedAt         DateTime?              @map("refunded_at")
+  createdAt          DateTime               @default(now()) @map("created_at")
+  updatedAt          DateTime               @updatedAt @map("updated_at")
 
-  invoice     Invoice          @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
-  customer    Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  createdBy   User             @relation("CreditNoteCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  validatedBy User?            @relation("CreditNoteValidatedBy", fields: [validatedById], references: [id], onDelete: SetNull)
-  cancelledBy User?            @relation("CreditNoteCancelledBy", fields: [cancelledById], references: [id], onDelete: SetNull)
-  refundedBy  User?            @relation("CreditNoteRefundedBy", fields: [refundedById], references: [id], onDelete: SetNull)
-  reasonRef   CreditNoteReason @relation(fields: [reasonId], references: [id], onDelete: Restrict)
+  invoice     Invoice              @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  customer    Customer             @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  createdBy   User                 @relation("CreditNoteCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  validatedBy User?                @relation("CreditNoteValidatedBy", fields: [validatedById], references: [id], onDelete: SetNull)
+  cancelledBy User?                @relation("CreditNoteCancelledBy", fields: [cancelledById], references: [id], onDelete: SetNull)
+  refundedBy  User?                @relation("CreditNoteRefundedBy", fields: [refundedById], references: [id], onDelete: SetNull)
+  reasonRef   CreditNoteReason     @relation(fields: [reasonId], references: [id], onDelete: Restrict)
   lines       CreditNoteLine[]
   auditLogs   CreditNoteAuditLog[]
   emailLogs   CreditNoteEmailLog[]
 
-  @@map("credit_notes")
   @@index([creditNoteNumber])
   @@index([invoiceId])
   @@index([customerId])
@@ -1001,6 +1029,7 @@ model CreditNote {
   @@index([status])
   @@index([issueDate])
   @@index([reasonId])
+  @@map("credit_notes")
 }
 
 model CreditNoteReason {
@@ -1022,30 +1051,30 @@ model CreditNoteReason {
   createdBy   User?        @relation(fields: [createdById], references: [id], onDelete: SetNull)
   creditNotes CreditNote[]
 
-  @@map("credit_note_reasons")
   @@index([isActive])
   @@index([category])
   @@index([sortOrder])
+  @@map("credit_note_reasons")
 }
 
 model CreditNoteLine {
-  id            String   @id @default(uuid()) @db.Uuid
-  creditNoteId  String   @map("credit_note_id") @db.Uuid
-  invoiceItemId String?  @map("invoice_item_id") @db.Uuid
-  description   String   @db.Text
-  unit          String?  @db.VarChar(50)
-  quantity      Decimal  @db.Decimal(12, 2)
-  unitPrice     Decimal  @map("unit_price") @db.Decimal(12, 2)
-  taxRate       Decimal  @default(0) @map("tax_rate") @db.Decimal(5, 2)
-  lineTotal     Decimal  @map("line_total") @db.Decimal(12, 2)
-  sortOrder     Int      @default(0) @map("sort_order")
+  id            String  @id @default(uuid()) @db.Uuid
+  creditNoteId  String  @map("credit_note_id") @db.Uuid
+  invoiceItemId String? @map("invoice_item_id") @db.Uuid
+  description   String  @db.Text
+  unit          String? @db.VarChar(50)
+  quantity      Decimal @db.Decimal(12, 2)
+  unitPrice     Decimal @map("unit_price") @db.Decimal(12, 2)
+  taxRate       Decimal @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  lineTotal     Decimal @map("line_total") @db.Decimal(12, 2)
+  sortOrder     Int     @default(0) @map("sort_order")
 
-  creditNote CreditNote   @relation(fields: [creditNoteId], references: [id], onDelete: Cascade)
+  creditNote  CreditNote   @relation(fields: [creditNoteId], references: [id], onDelete: Cascade)
   invoiceItem InvoiceItem? @relation(fields: [invoiceItemId], references: [id], onDelete: SetNull)
 
-  @@map("credit_note_lines")
   @@index([creditNoteId])
   @@index([invoiceItemId])
+  @@map("credit_note_lines")
 }
 
 model CreditNoteAuditLog {
@@ -1061,105 +1090,104 @@ model CreditNoteAuditLog {
   creditNote CreditNote @relation(fields: [creditNoteId], references: [id], onDelete: Cascade)
   actor      User       @relation("CreditNoteAuditActor", fields: [actorId], references: [id], onDelete: Restrict)
 
-  @@map("credit_note_audit_logs")
   @@index([creditNoteId])
   @@index([actorId])
   @@index([action])
   @@index([createdAt])
+  @@map("credit_note_audit_logs")
 }
 
 model CreditNoteEmailLog {
-  id              String   @id @default(uuid()) @db.Uuid
-  creditNoteId    String   @map("credit_note_id") @db.Uuid
-  sentById        String?  @map("sent_by") @db.Uuid
-  recipientEmail  String   @map("recipient_email") @db.VarChar(255)
-  subject         String   @db.VarChar(255)
-  message         String   @db.Text
-  pdfLanguage     String   @default("fr") @map("pdf_language") @db.VarChar(10)
-  attachmentName  String   @map("attachment_name") @db.VarChar(255)
-  status          String   @db.VarChar(30)
-  deliveryMode    String?  @map("delivery_mode") @db.VarChar(30)
-  messageId       String?  @map("message_id") @db.VarChar(255)
-  filePath        String?  @map("file_path") @db.VarChar(1000)
-  errorMessage    String?  @map("error_message") @db.Text
-  createdAt       DateTime @default(now()) @map("created_at")
+  id             String   @id @default(uuid()) @db.Uuid
+  creditNoteId   String   @map("credit_note_id") @db.Uuid
+  sentById       String?  @map("sent_by") @db.Uuid
+  recipientEmail String   @map("recipient_email") @db.VarChar(255)
+  subject        String   @db.VarChar(255)
+  message        String   @db.Text
+  pdfLanguage    String   @default("fr") @map("pdf_language") @db.VarChar(10)
+  attachmentName String   @map("attachment_name") @db.VarChar(255)
+  status         String   @db.VarChar(30)
+  deliveryMode   String?  @map("delivery_mode") @db.VarChar(30)
+  messageId      String?  @map("message_id") @db.VarChar(255)
+  filePath       String?  @map("file_path") @db.VarChar(1000)
+  errorMessage   String?  @map("error_message") @db.Text
+  createdAt      DateTime @default(now()) @map("created_at")
 
   creditNote CreditNote @relation(fields: [creditNoteId], references: [id], onDelete: Cascade)
   sentBy     User?      @relation(fields: [sentById], references: [id], onDelete: SetNull)
 
-  @@map("credit_note_email_logs")
   @@index([creditNoteId])
   @@index([status])
   @@index([createdAt])
+  @@map("credit_note_email_logs")
 }
 
 model Contract {
-  id                      String              @id @default(uuid()) @db.Uuid
-  contractNumber          String              @unique @map("contract_number") @db.VarChar(50)
-  clientId                String              @map("client_id") @db.Uuid
-  createdById             String              @map("created_by") @db.Uuid
-  sentById                String?             @map("sent_by") @db.Uuid
-  companySignedById       String?             @map("company_signed_by") @db.Uuid
-  status                  ContractStatus      @default(DRAFT)
-  title                   String              @db.VarChar(255)
-  contractType            String              @default("GENERAL") @map("contract_type") @db.VarChar(80)
-  language                String              @default("fr") @db.VarChar(10)
-  startDate               DateTime?           @map("start_date") @db.Date
-  endDate                 DateTime?           @map("end_date") @db.Date
-  renewalType             ContractRenewalType @default(NONE) @map("renewal_type")
-  renewalNoticeDays       Int?                @map("renewal_notice_days")
-  amount                  Decimal?            @db.Decimal(12, 2)
-  currency                String              @default("MAD") @db.VarChar(10)
-  pricingType             ContractPricingType @default(FIXED) @map("pricing_type")
-  unitRate                Decimal?            @map("unit_rate") @db.Decimal(12, 2)
-  estimatedQuantity       Decimal?            @map("estimated_quantity") @db.Decimal(12, 2)
-  fixedAmount             Decimal?            @map("fixed_amount") @db.Decimal(12, 2)
-  billingFrequency        ContractBillingFrequency @default(ONE_TIME) @map("billing_frequency")
-  billingDay              Int?                @map("billing_day")
-  billingStartDate        DateTime?           @map("billing_start_date") @db.Date
-  billingEndDate          DateTime?           @map("billing_end_date") @db.Date
-  minimumBillableUnits    Decimal?            @map("minimum_billable_units") @db.Decimal(12, 2)
-  includedUnits           Decimal?            @map("included_units") @db.Decimal(12, 2)
-  overtimeRate            Decimal?            @map("overtime_rate") @db.Decimal(12, 2)
-  taxRate                 Decimal             @default(0) @map("tax_rate") @db.Decimal(5, 2)
-  paymentTermsDays        Int                 @default(30) @map("payment_terms_days")
-  autoInvoiceEnabled      Boolean             @default(false) @map("auto_invoice_enabled")
-  nextInvoiceDate         DateTime?           @map("next_invoice_date") @db.Date
-  lastInvoiceDate         DateTime?           @map("last_invoice_date") @db.Date
-  prorationPolicy         ContractProrationPolicy @default(NONE) @map("proration_policy")
-  billingDescription      String?             @map("billing_description") @db.Text
-  summary                 String?             @db.Text
-  terms                   String?             @db.Text
-  currentVersionId        String?             @unique @map("current_version_id") @db.Uuid
-  signedVersionId         String?             @unique @map("signed_version_id") @db.Uuid
-  pdfHash                 String?             @map("pdf_hash") @db.VarChar(128)
-  sentAt                  DateTime?           @map("sent_at")
-  viewedAt                DateTime?           @map("viewed_at")
-  signedAt                DateTime?           @map("signed_at")
-  activatedAt             DateTime?           @map("activated_at")
-  expiredAt               DateTime?           @map("expired_at")
-  terminatedAt            DateTime?           @map("terminated_at")
-  cancelledAt             DateTime?           @map("cancelled_at")
-  createdAt               DateTime            @default(now()) @map("created_at")
-  updatedAt               DateTime            @updatedAt @map("updated_at")
+  id                   String                   @id @default(uuid()) @db.Uuid
+  contractNumber       String                   @unique @map("contract_number") @db.VarChar(50)
+  clientId             String                   @map("client_id") @db.Uuid
+  createdById          String                   @map("created_by") @db.Uuid
+  sentById             String?                  @map("sent_by") @db.Uuid
+  companySignedById    String?                  @map("company_signed_by") @db.Uuid
+  status               ContractStatus           @default(DRAFT)
+  title                String                   @db.VarChar(255)
+  contractType         String                   @default("GENERAL") @map("contract_type") @db.VarChar(80)
+  language             String                   @default("fr") @db.VarChar(10)
+  startDate            DateTime?                @map("start_date") @db.Date
+  endDate              DateTime?                @map("end_date") @db.Date
+  renewalType          ContractRenewalType      @default(NONE) @map("renewal_type")
+  renewalNoticeDays    Int?                     @map("renewal_notice_days")
+  amount               Decimal?                 @db.Decimal(12, 2)
+  currency             String                   @default("MAD") @db.VarChar(10)
+  pricingType          ContractPricingType      @default(FIXED) @map("pricing_type")
+  unitRate             Decimal?                 @map("unit_rate") @db.Decimal(12, 2)
+  estimatedQuantity    Decimal?                 @map("estimated_quantity") @db.Decimal(12, 2)
+  fixedAmount          Decimal?                 @map("fixed_amount") @db.Decimal(12, 2)
+  billingFrequency     ContractBillingFrequency @default(ONE_TIME) @map("billing_frequency")
+  billingDay           Int?                     @map("billing_day")
+  billingStartDate     DateTime?                @map("billing_start_date") @db.Date
+  billingEndDate       DateTime?                @map("billing_end_date") @db.Date
+  minimumBillableUnits Decimal?                 @map("minimum_billable_units") @db.Decimal(12, 2)
+  includedUnits        Decimal?                 @map("included_units") @db.Decimal(12, 2)
+  overtimeRate         Decimal?                 @map("overtime_rate") @db.Decimal(12, 2)
+  taxRate              Decimal                  @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  paymentTermsDays     Int                      @default(30) @map("payment_terms_days")
+  autoInvoiceEnabled   Boolean                  @default(false) @map("auto_invoice_enabled")
+  nextInvoiceDate      DateTime?                @map("next_invoice_date") @db.Date
+  lastInvoiceDate      DateTime?                @map("last_invoice_date") @db.Date
+  prorationPolicy      ContractProrationPolicy  @default(NONE) @map("proration_policy")
+  billingDescription   String?                  @map("billing_description") @db.Text
+  summary              String?                  @db.Text
+  terms                String?                  @db.Text
+  currentVersionId     String?                  @unique @map("current_version_id") @db.Uuid
+  signedVersionId      String?                  @unique @map("signed_version_id") @db.Uuid
+  pdfHash              String?                  @map("pdf_hash") @db.VarChar(128)
+  sentAt               DateTime?                @map("sent_at")
+  viewedAt             DateTime?                @map("viewed_at")
+  signedAt             DateTime?                @map("signed_at")
+  activatedAt          DateTime?                @map("activated_at")
+  expiredAt            DateTime?                @map("expired_at")
+  terminatedAt         DateTime?                @map("terminated_at")
+  cancelledAt          DateTime?                @map("cancelled_at")
+  createdAt            DateTime                 @default(now()) @map("created_at")
+  updatedAt            DateTime                 @updatedAt @map("updated_at")
 
-  client          Customer     @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  createdBy       User         @relation("ContractCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  sentBy          User?        @relation("ContractSentBy", fields: [sentById], references: [id], onDelete: SetNull)
-  companySignedBy User?        @relation("ContractCompanySignedBy", fields: [companySignedById], references: [id], onDelete: SetNull)
-  currentVersion  ContractVersion? @relation("ContractCurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
-  signedVersion   ContractVersion? @relation("ContractSignedVersion", fields: [signedVersionId], references: [id], onDelete: SetNull)
-  versions        ContractVersion[] @relation("ContractVersions")
-  signatureLinks  ContractSignatureLink[]
-  auditLogs       ContractAuditLog[]
-  emailLogs       ContractEmailLog[]
-  invoices        Invoice[] @relation("ContractInvoices")
-  timeEntries     ContractTimeEntry[]
-  milestones      ContractMilestone[]
+  client               Customer                      @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  createdBy            User                          @relation("ContractCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  sentBy               User?                         @relation("ContractSentBy", fields: [sentById], references: [id], onDelete: SetNull)
+  companySignedBy      User?                         @relation("ContractCompanySignedBy", fields: [companySignedById], references: [id], onDelete: SetNull)
+  currentVersion       ContractVersion?              @relation("ContractCurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
+  signedVersion        ContractVersion?              @relation("ContractSignedVersion", fields: [signedVersionId], references: [id], onDelete: SetNull)
+  versions             ContractVersion[]             @relation("ContractVersions")
+  signatureLinks       ContractSignatureLink[]
+  auditLogs            ContractAuditLog[]
+  emailLogs            ContractEmailLog[]
+  invoices             Invoice[]                     @relation("ContractInvoices")
+  timeEntries          ContractTimeEntry[]
+  milestones           ContractMilestone[]
   billingScheduleItems ContractBillingScheduleItem[]
-  billingJobs     ContractBillingJob[]
+  billingJobs          ContractBillingJob[]
 
-  @@map("contracts")
   @@index([clientId])
   @@index([createdById])
   @@index([status])
@@ -1167,174 +1195,175 @@ model Contract {
   @@index([autoInvoiceEnabled, nextInvoiceDate])
   @@index([startDate])
   @@index([endDate])
+  @@map("contracts")
 }
 
 model ContractVersion {
-  id                    String                  @id @default(uuid()) @db.Uuid
-  contractId            String                  @map("contract_id") @db.Uuid
-  versionNumber         Int                     @map("version_number")
-  title                 String                  @db.VarChar(255)
-  content               String                  @db.Text
-  structuredData        Json?                   @map("structured_data")
-  pricingSnapshot       Json?                   @map("pricing_snapshot")
-  signatureStatus       ContractSignatureStatus @default(NOT_STARTED) @map("signature_status")
-  isSigned              Boolean                 @default(false) @map("is_signed")
-  contentHash           String                  @map("content_hash") @db.VarChar(128)
-  companySignatureUrl   String?                 @map("company_signature_url") @db.VarChar(500)
-  companyStampUrl       String?                 @map("company_stamp_url") @db.VarChar(500)
-  companySignedById     String?                 @map("company_signed_by") @db.Uuid
-  companySignedAt       DateTime?               @map("company_signed_at")
-  clientSignerName      String?                 @map("client_signer_name") @db.VarChar(255)
-  clientSignerEmail     String?                 @map("client_signer_email") @db.VarChar(255)
-  clientSignedAt        DateTime?               @map("client_signed_at")
-  signedPdfHash         String?                 @map("signed_pdf_hash") @db.VarChar(128)
-  signedPdfStorageKey   String?                 @map("signed_pdf_storage_key") @db.VarChar(1000)
-  revokedAt             DateTime?               @map("revoked_at")
-  revokedById           String?                 @map("revoked_by") @db.Uuid
-  revocationReason      String?                 @map("revocation_reason") @db.Text
-  revocationNote        String?                 @map("revocation_note") @db.Text
-  previousPdfHash       String?                 @map("previous_pdf_hash") @db.VarChar(128)
-  createdById           String                  @map("created_by") @db.Uuid
-  createdAt             DateTime                @default(now()) @map("created_at")
+  id                  String                  @id @default(uuid()) @db.Uuid
+  contractId          String                  @map("contract_id") @db.Uuid
+  versionNumber       Int                     @map("version_number")
+  title               String                  @db.VarChar(255)
+  content             String                  @db.Text
+  structuredData      Json?                   @map("structured_data")
+  pricingSnapshot     Json?                   @map("pricing_snapshot")
+  signatureStatus     ContractSignatureStatus @default(NOT_STARTED) @map("signature_status")
+  isSigned            Boolean                 @default(false) @map("is_signed")
+  contentHash         String                  @map("content_hash") @db.VarChar(128)
+  companySignatureUrl String?                 @map("company_signature_url") @db.VarChar(500)
+  companyStampUrl     String?                 @map("company_stamp_url") @db.VarChar(500)
+  companySignedById   String?                 @map("company_signed_by") @db.Uuid
+  companySignedAt     DateTime?               @map("company_signed_at")
+  clientSignerName    String?                 @map("client_signer_name") @db.VarChar(255)
+  clientSignerEmail   String?                 @map("client_signer_email") @db.VarChar(255)
+  clientSignedAt      DateTime?               @map("client_signed_at")
+  signedPdfHash       String?                 @map("signed_pdf_hash") @db.VarChar(128)
+  signedPdfStorageKey String?                 @map("signed_pdf_storage_key") @db.VarChar(1000)
+  revokedAt           DateTime?               @map("revoked_at")
+  revokedById         String?                 @map("revoked_by") @db.Uuid
+  revocationReason    String?                 @map("revocation_reason") @db.Text
+  revocationNote      String?                 @map("revocation_note") @db.Text
+  previousPdfHash     String?                 @map("previous_pdf_hash") @db.VarChar(128)
+  createdById         String                  @map("created_by") @db.Uuid
+  createdAt           DateTime                @default(now()) @map("created_at")
 
-  contract         Contract @relation("ContractVersions", fields: [contractId], references: [id], onDelete: Cascade)
-  createdBy        User     @relation("ContractVersionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  companySignedBy  User?    @relation("ContractVersionCompanySignedBy", fields: [companySignedById], references: [id], onDelete: SetNull)
-  revokedBy        User?    @relation("ContractVersionRevokedBy", fields: [revokedById], references: [id], onDelete: SetNull)
-  currentFor       Contract? @relation("ContractCurrentVersion")
-  signedFor        Contract? @relation("ContractSignedVersion")
-  invoices         Invoice[] @relation("ContractVersionInvoices")
+  contract        Contract  @relation("ContractVersions", fields: [contractId], references: [id], onDelete: Cascade)
+  createdBy       User      @relation("ContractVersionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  companySignedBy User?     @relation("ContractVersionCompanySignedBy", fields: [companySignedById], references: [id], onDelete: SetNull)
+  revokedBy       User?     @relation("ContractVersionRevokedBy", fields: [revokedById], references: [id], onDelete: SetNull)
+  currentFor      Contract? @relation("ContractCurrentVersion")
+  signedFor       Contract? @relation("ContractSignedVersion")
+  invoices        Invoice[] @relation("ContractVersionInvoices")
 
   @@unique([contractId, versionNumber])
-  @@map("contract_versions")
   @@index([contractId])
   @@index([createdById])
   @@index([signatureStatus])
   @@index([companySignedById])
   @@index([revokedById])
+  @@map("contract_versions")
 }
 
 model ContractTimeEntry {
-  id             String                  @id @default(uuid()) @db.Uuid
-  contractId     String                  @map("contract_id") @db.Uuid
-  userId         String                  @map("user_id") @db.Uuid
-  createdById    String                  @map("created_by") @db.Uuid
-  approvedById   String?                 @map("approved_by") @db.Uuid
-  submittedById  String?                 @map("submitted_by") @db.Uuid
-  rejectedById   String?                 @map("rejected_by") @db.Uuid
-  invoiceId      String?                 @map("invoice_id") @db.Uuid
-  workDate       DateTime                @map("work_date") @db.Date
-  startTime      DateTime?               @map("start_time")
-  endTime        DateTime?               @map("end_time")
-  breakMinutes   Int                     @default(0) @map("break_minutes")
-  durationMinutes Int                    @default(0) @map("duration_minutes")
-  billableMinutes Int                    @default(0) @map("billable_minutes")
-  quantity       Decimal                 @db.Decimal(12, 2)
-  activityType   String?                 @map("activity_type") @db.VarChar(80)
-  description    String                  @db.Text
-  internalNote   String?                 @map("internal_note") @db.Text
-  billable       Boolean                 @default(true)
-  status         ContractTimeEntryStatus @default(DRAFT)
-  appliedRate    Decimal?                @map("applied_rate") @db.Decimal(12, 2)
-  currency       String?                 @db.VarChar(3)
-  calculatedAmount Decimal?              @map("calculated_amount") @db.Decimal(12, 2)
-  pricingSnapshot Json?                  @map("pricing_snapshot")
-  rejectionReason String?                @map("rejection_reason") @db.Text
-  submittedAt    DateTime?               @map("submitted_at")
-  approvedAt     DateTime?               @map("approved_at")
-  rejectedAt     DateTime?               @map("rejected_at")
-  invoicedAt     DateTime?               @map("invoiced_at")
-  createdAt      DateTime                @default(now()) @map("created_at")
-  updatedAt      DateTime                @updatedAt @map("updated_at")
+  id               String                  @id @default(uuid()) @db.Uuid
+  contractId       String                  @map("contract_id") @db.Uuid
+  userId           String                  @map("user_id") @db.Uuid
+  createdById      String                  @map("created_by") @db.Uuid
+  approvedById     String?                 @map("approved_by") @db.Uuid
+  submittedById    String?                 @map("submitted_by") @db.Uuid
+  rejectedById     String?                 @map("rejected_by") @db.Uuid
+  invoiceId        String?                 @map("invoice_id") @db.Uuid
+  workDate         DateTime                @map("work_date") @db.Date
+  startTime        DateTime?               @map("start_time")
+  endTime          DateTime?               @map("end_time")
+  breakMinutes     Int                     @default(0) @map("break_minutes")
+  durationMinutes  Int                     @default(0) @map("duration_minutes")
+  billableMinutes  Int                     @default(0) @map("billable_minutes")
+  quantity         Decimal                 @db.Decimal(12, 2)
+  activityType     String?                 @map("activity_type") @db.VarChar(80)
+  description      String                  @db.Text
+  internalNote     String?                 @map("internal_note") @db.Text
+  billable         Boolean                 @default(true)
+  status           ContractTimeEntryStatus @default(DRAFT)
+  appliedRate      Decimal?                @map("applied_rate") @db.Decimal(12, 2)
+  currency         String?                 @db.VarChar(3)
+  calculatedAmount Decimal?                @map("calculated_amount") @db.Decimal(12, 2)
+  pricingSnapshot  Json?                   @map("pricing_snapshot")
+  rejectionReason  String?                 @map("rejection_reason") @db.Text
+  submittedAt      DateTime?               @map("submitted_at")
+  approvedAt       DateTime?               @map("approved_at")
+  rejectedAt       DateTime?               @map("rejected_at")
+  invoicedAt       DateTime?               @map("invoiced_at")
+  createdAt        DateTime                @default(now()) @map("created_at")
+  updatedAt        DateTime                @updatedAt @map("updated_at")
 
-  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
-  user       User     @relation("ContractTimeEntryUser", fields: [userId], references: [id], onDelete: Restrict)
-  createdBy  User     @relation("ContractTimeEntryCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  approvedBy User?    @relation("ContractTimeEntryApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
-  submittedBy User?   @relation("ContractTimeEntrySubmittedBy", fields: [submittedById], references: [id], onDelete: SetNull)
-  rejectedBy User?    @relation("ContractTimeEntryRejectedBy", fields: [rejectedById], references: [id], onDelete: SetNull)
-  invoice    Invoice? @relation("ContractTimeEntryInvoice", fields: [invoiceId], references: [id], onDelete: SetNull)
+  contract    Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  user        User     @relation("ContractTimeEntryUser", fields: [userId], references: [id], onDelete: Restrict)
+  createdBy   User     @relation("ContractTimeEntryCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedBy  User?    @relation("ContractTimeEntryApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  submittedBy User?    @relation("ContractTimeEntrySubmittedBy", fields: [submittedById], references: [id], onDelete: SetNull)
+  rejectedBy  User?    @relation("ContractTimeEntryRejectedBy", fields: [rejectedById], references: [id], onDelete: SetNull)
+  invoice     Invoice? @relation("ContractTimeEntryInvoice", fields: [invoiceId], references: [id], onDelete: SetNull)
 
-  @@map("contract_time_entries")
   @@index([contractId])
   @@index([userId])
   @@index([userId, workDate])
   @@index([status])
   @@index([invoiceId])
   @@index([contractId, status, invoiceId])
+  @@map("contract_time_entries")
 }
 
 model ContractMilestone {
-  id          String                  @id @default(uuid()) @db.Uuid
-  contractId  String                  @map("contract_id") @db.Uuid
-  approvedById String?                @map("approved_by") @db.Uuid
-  invoiceId   String?                 @unique @map("invoice_id") @db.Uuid
-  title       String                  @db.VarChar(255)
-  description String?                 @db.Text
-  dueDate     DateTime?               @map("due_date") @db.Date
-  amount      Decimal?                @db.Decimal(12, 2)
-  percentage  Decimal?                @db.Decimal(5, 2)
-  status      ContractMilestoneStatus @default(PENDING)
-  completedAt DateTime?               @map("completed_at")
-  approvedAt  DateTime?               @map("approved_at")
-  invoicedAt  DateTime?               @map("invoiced_at")
-  sortOrder   Int                     @default(0) @map("sort_order")
-  createdAt   DateTime                @default(now()) @map("created_at")
-  updatedAt   DateTime                @updatedAt @map("updated_at")
+  id           String                  @id @default(uuid()) @db.Uuid
+  contractId   String                  @map("contract_id") @db.Uuid
+  approvedById String?                 @map("approved_by") @db.Uuid
+  invoiceId    String?                 @unique @map("invoice_id") @db.Uuid
+  title        String                  @db.VarChar(255)
+  description  String?                 @db.Text
+  dueDate      DateTime?               @map("due_date") @db.Date
+  amount       Decimal?                @db.Decimal(12, 2)
+  percentage   Decimal?                @db.Decimal(5, 2)
+  status       ContractMilestoneStatus @default(PENDING)
+  completedAt  DateTime?               @map("completed_at")
+  approvedAt   DateTime?               @map("approved_at")
+  invoicedAt   DateTime?               @map("invoiced_at")
+  sortOrder    Int                     @default(0) @map("sort_order")
+  createdAt    DateTime                @default(now()) @map("created_at")
+  updatedAt    DateTime                @updatedAt @map("updated_at")
 
-  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
-  approvedBy User?    @relation("ContractMilestoneApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
-  invoice    Invoice? @relation("ContractMilestonePrimaryInvoice", fields: [invoiceId], references: [id], onDelete: SetNull)
+  contract   Contract  @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  approvedBy User?     @relation("ContractMilestoneApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  invoice    Invoice?  @relation("ContractMilestonePrimaryInvoice", fields: [invoiceId], references: [id], onDelete: SetNull)
   invoices   Invoice[] @relation("InvoiceContractMilestone")
 
-  @@map("contract_milestones")
   @@index([contractId])
   @@index([status])
   @@index([sortOrder])
+  @@map("contract_milestones")
 }
 
 model ContractBillingScheduleItem {
-  id          String                        @id @default(uuid()) @db.Uuid
-  contractId  String                        @map("contract_id") @db.Uuid
-  invoiceId   String?                       @unique @map("invoice_id") @db.Uuid
-  label       String                        @db.VarChar(255)
-  dueDate     DateTime                      @map("due_date") @db.Date
-  amount      Decimal                       @db.Decimal(12, 2)
-  status      ContractBillingScheduleStatus @default(PENDING)
-  invoicedAt  DateTime?                     @map("invoiced_at")
-  sortOrder   Int                           @default(0) @map("sort_order")
-  createdAt   DateTime                      @default(now()) @map("created_at")
-  updatedAt   DateTime                      @updatedAt @map("updated_at")
+  id         String                        @id @default(uuid()) @db.Uuid
+  contractId String                        @map("contract_id") @db.Uuid
+  invoiceId  String?                       @unique @map("invoice_id") @db.Uuid
+  label      String                        @db.VarChar(255)
+  dueDate    DateTime                      @map("due_date") @db.Date
+  amount     Decimal                       @db.Decimal(12, 2)
+  status     ContractBillingScheduleStatus @default(PENDING)
+  invoicedAt DateTime?                     @map("invoiced_at")
+  sortOrder  Int                           @default(0) @map("sort_order")
+  createdAt  DateTime                      @default(now()) @map("created_at")
+  updatedAt  DateTime                      @updatedAt @map("updated_at")
 
-  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
-  invoice  Invoice? @relation("ContractBillingSchedulePrimaryInvoice", fields: [invoiceId], references: [id], onDelete: SetNull)
+  contract Contract  @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  invoice  Invoice?  @relation("ContractBillingSchedulePrimaryInvoice", fields: [invoiceId], references: [id], onDelete: SetNull)
   invoices Invoice[] @relation("InvoiceContractBillingScheduleItem")
 
-  @@map("contract_billing_schedule_items")
   @@index([contractId])
   @@index([status])
   @@index([dueDate])
+  @@map("contract_billing_schedule_items")
 }
 
 model ContractBillingJob {
-  id          String                   @id @default(uuid()) @db.Uuid
-  contractId  String                   @map("contract_id") @db.Uuid
-  triggeredById String?                @map("triggered_by") @db.Uuid
-  invoiceId   String?                  @map("invoice_id") @db.Uuid
-  status      ContractBillingJobStatus
-  periodStart DateTime?                @map("period_start") @db.Date
-  periodEnd   DateTime?                @map("period_end") @db.Date
-  errorMessage String?                 @map("error_message") @db.Text
-  createdAt   DateTime                 @default(now()) @map("created_at")
+  id            String                   @id @default(uuid()) @db.Uuid
+  contractId    String                   @map("contract_id") @db.Uuid
+  triggeredById String?                  @map("triggered_by") @db.Uuid
+  invoiceId     String?                  @map("invoice_id") @db.Uuid
+  status        ContractBillingJobStatus
+  periodStart   DateTime?                @map("period_start") @db.Date
+  periodEnd     DateTime?                @map("period_end") @db.Date
+  errorMessage  String?                  @map("error_message") @db.Text
+  createdAt     DateTime                 @default(now()) @map("created_at")
 
   contract    Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
   triggeredBy User?    @relation(fields: [triggeredById], references: [id], onDelete: SetNull)
   invoice     Invoice? @relation("ContractBillingJobInvoice", fields: [invoiceId], references: [id], onDelete: SetNull)
 
-  @@map("contract_billing_jobs")
   @@index([contractId])
   @@index([status])
   @@index([createdAt])
+  @@map("contract_billing_jobs")
 }
 
 model ContractTemplate {
@@ -1355,9 +1384,9 @@ model ContractTemplate {
 
   createdBy User? @relation("ContractTemplateCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
-  @@map("contract_templates")
   @@index([isActive])
   @@index([sortOrder])
+  @@map("contract_templates")
 }
 
 model ContractSignatureLink {
@@ -1377,10 +1406,10 @@ model ContractSignatureLink {
 
   contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
 
-  @@map("contract_signature_links")
   @@index([contractId])
   @@index([status])
   @@index([expiresAt])
+  @@map("contract_signature_links")
 }
 
 model ContractAuditLog {
@@ -1397,35 +1426,35 @@ model ContractAuditLog {
   contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
   actor    User?    @relation("ContractAuditActor", fields: [actorId], references: [id], onDelete: SetNull)
 
-  @@map("contract_audit_logs")
   @@index([contractId])
   @@index([actorId])
   @@index([action])
   @@index([createdAt])
+  @@map("contract_audit_logs")
 }
 
 model ContractEmailLog {
-  id              String   @id @default(uuid()) @db.Uuid
-  contractId      String   @map("contract_id") @db.Uuid
-  sentById        String?  @map("sent_by") @db.Uuid
-  recipientEmail  String   @map("recipient_email") @db.VarChar(255)
-  cc              String?  @db.Text
-  subject         String   @db.VarChar(255)
-  message         String   @db.Text
-  pdfLanguage     String   @default("fr") @map("pdf_language") @db.VarChar(10)
-  attachmentName  String   @map("attachment_name") @db.VarChar(255)
-  status          String   @db.VarChar(30)
-  messageId       String?  @map("message_id") @db.VarChar(255)
-  errorMessage    String?  @map("error_message") @db.Text
-  createdAt       DateTime @default(now()) @map("created_at")
+  id             String   @id @default(uuid()) @db.Uuid
+  contractId     String   @map("contract_id") @db.Uuid
+  sentById       String?  @map("sent_by") @db.Uuid
+  recipientEmail String   @map("recipient_email") @db.VarChar(255)
+  cc             String?  @db.Text
+  subject        String   @db.VarChar(255)
+  message        String   @db.Text
+  pdfLanguage    String   @default("fr") @map("pdf_language") @db.VarChar(10)
+  attachmentName String   @map("attachment_name") @db.VarChar(255)
+  status         String   @db.VarChar(30)
+  messageId      String?  @map("message_id") @db.VarChar(255)
+  errorMessage   String?  @map("error_message") @db.Text
+  createdAt      DateTime @default(now()) @map("created_at")
 
   contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
   sentBy   User?    @relation(fields: [sentById], references: [id], onDelete: SetNull)
 
-  @@map("contract_email_logs")
   @@index([contractId])
   @@index([status])
   @@index([createdAt])
+  @@map("contract_email_logs")
 }
 
 model ContractSequence {
@@ -1448,60 +1477,60 @@ model Payment {
   createdAt    DateTime      @default(now()) @map("created_at")
 
   // Relations
-  invoice      Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  recordedBy   User          @relation(fields: [recordedById], references: [id], onDelete: Restrict)
+  invoice    Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  recordedBy User    @relation(fields: [recordedById], references: [id], onDelete: Restrict)
 
-  @@map("payments")
   @@index([paymentDate])
+  @@map("payments")
 }
 
 model RecurringPlan {
-  id                 String              @id @default(uuid()) @db.Uuid
-  customerId         String              @map("customer_id") @db.Uuid
-  createdById        String              @map("created_by") @db.Uuid
-  name               String              @db.VarChar(255)
-  frequency          RecurringFrequency
-  intervalCount      Int                 @default(1) @map("interval_count")
-  status             RecurringPlanStatus @default(ACTIVE)
-  startDate          DateTime            @map("start_date") @db.Date
-  endDate            DateTime?           @map("end_date") @db.Date
-  nextRunDate        DateTime            @map("next_run_date") @db.Date
-  lastRunAt          DateTime?           @map("last_run_at")
-  dueDays            Int                 @default(30) @map("due_days")
-  autoSend           Boolean             @default(false) @map("auto_send")
-  currency           String              @default("MAD") @db.VarChar(10)
-  discount           Decimal             @default(0) @db.Decimal(12, 2)
-  notes              String?             @db.Text
-  terms              String?             @db.Text
-  createdAt          DateTime            @default(now()) @map("created_at")
-  updatedAt          DateTime            @updatedAt @map("updated_at")
+  id            String              @id @default(uuid()) @db.Uuid
+  customerId    String              @map("customer_id") @db.Uuid
+  createdById   String              @map("created_by") @db.Uuid
+  name          String              @db.VarChar(255)
+  frequency     RecurringFrequency
+  intervalCount Int                 @default(1) @map("interval_count")
+  status        RecurringPlanStatus @default(ACTIVE)
+  startDate     DateTime            @map("start_date") @db.Date
+  endDate       DateTime?           @map("end_date") @db.Date
+  nextRunDate   DateTime            @map("next_run_date") @db.Date
+  lastRunAt     DateTime?           @map("last_run_at")
+  dueDays       Int                 @default(30) @map("due_days")
+  autoSend      Boolean             @default(false) @map("auto_send")
+  currency      String              @default("MAD") @db.VarChar(10)
+  discount      Decimal             @default(0) @db.Decimal(12, 2)
+  notes         String?             @db.Text
+  terms         String?             @db.Text
+  createdAt     DateTime            @default(now()) @map("created_at")
+  updatedAt     DateTime            @updatedAt @map("updated_at")
 
-  customer  Customer             @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  createdBy User                 @relation(fields: [createdById], references: [id], onDelete: Restrict)
-  items     RecurringPlanItem[]
-  invoices  Invoice[]
+  customer   Customer             @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  createdBy  User                 @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  items      RecurringPlanItem[]
+  invoices   Invoice[]
   executions RecurringExecution[]
 
-  @@map("recurring_plans")
   @@index([customerId])
   @@index([createdById])
   @@index([status, nextRunDate])
+  @@map("recurring_plans")
 }
 
 model RecurringPlanItem {
-  id          String   @id @default(uuid()) @db.Uuid
-  planId      String   @map("plan_id") @db.Uuid
-  description String   @db.Text
-  unit        String?  @db.VarChar(50)
-  quantity    Decimal  @db.Decimal(12, 2)
-  unitPrice   Decimal  @map("unit_price") @db.Decimal(12, 2)
-  taxRate     Decimal  @default(0) @map("tax_rate") @db.Decimal(5, 2)
-  sortOrder   Int      @default(0) @map("sort_order")
+  id          String  @id @default(uuid()) @db.Uuid
+  planId      String  @map("plan_id") @db.Uuid
+  description String  @db.Text
+  unit        String? @db.VarChar(50)
+  quantity    Decimal @db.Decimal(12, 2)
+  unitPrice   Decimal @map("unit_price") @db.Decimal(12, 2)
+  taxRate     Decimal @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  sortOrder   Int     @default(0) @map("sort_order")
 
   plan RecurringPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
 
-  @@map("recurring_plan_items")
   @@index([planId])
+  @@map("recurring_plan_items")
 }
 
 model RecurringExecution {
@@ -1517,9 +1546,9 @@ model RecurringExecution {
   invoice Invoice?      @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
 
   @@unique([planId, scheduledFor])
-  @@map("recurring_executions")
   @@index([status])
   @@index([invoiceId])
+  @@map("recurring_executions")
 }
 
 model Reminder {
@@ -1536,9 +1565,9 @@ model Reminder {
   createdAt      DateTime       @default(now()) @map("created_at")
 
   // Relations
-  invoice        Invoice        @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  sentBy         User?          @relation(fields: [sentById], references: [id], onDelete: SetNull)
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  sentBy  User?   @relation(fields: [sentById], references: [id], onDelete: SetNull)
 
-  @@map("reminders")
   @@index([status])
+  @@map("reminders")
 }

@@ -1959,7 +1959,9 @@
       "cancel": "Impossible d annuler cette action IA.",
       "revise": "Impossible de regenerer l apercu de cette action.",
       "archive": "Impossible d archiver cette conversation.",
-      "copy": "Impossible de copier la reponse."
+      "copy": "Impossible de copier la reponse.",
+      "contractNotInvoiceable": "Seuls les contrats envoyes, consultes ou actifs peuvent etre factures.",
+      "contractSignatureIncomplete": "Le workflow de signature du contrat doit etre termine avant la facturation."
     },
     "activeContext": "Contexte actif",
     "clearConversation": "Vider la conversation",
@@ -2084,7 +2086,9 @@
       "USD": "USD",
       "EUR": "EUR"
     },
-    "itemsCount": "{{count}} element(s)"
+    "itemsCount": "{{count}} element(s)",
+    "lineItem": "Ligne {{index}}",
+    "addLine": "Ajouter une ligne"
   },
   "notifications": {
     "confirm": {

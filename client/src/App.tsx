@@ -16,7 +16,7 @@ import { useConfirm } from '@/hooks/useConfirm';
 import { useToast } from '@/hooks/useToast';
 import { formatCurrency, getDaysUntilDue } from '@/lib/utils';
 import { getInitialTheme, getStoredTheme, isThemePreference, persistTheme } from '@/lib/theme';
-import { approveDevis, cancelDevisSignature, cancelInvoiceSignature, changePassword, convertDevisToInvoice, createDevis, createInvoice, createCustomer, createProduct, createUser, createReminder, deleteCompanySignature, deleteCompanyStamp, deleteCustomer, deleteDevis, deleteDraftDevis, downloadDevisPdf, downloadInvoicePdf, downloadInvoicesExcel, getCompanySettings, getCustomers, getCustomerById, getCurrentUser, getDevis, getDevisById, getEmailDeliveryStatus, getInvoiceById, getInvoiceDashboard, getInvoices, getPayments, getPublicContract, getRecurringPlans, getProducts, getReceivablesAgingReport, getRecentEmailLogs, getReminders, getTaxSummaryReport, getUsers, getRbacPermissions, getRbacRoles, getRbacUsers, assignRbacPermissions, assignRbacUserRole, getRbacUserClients, assignRbacUserClients, createRbacPermission, createRbacRole, deleteRbacRole, clearAuthSession, login, logout, recordPayment, createRecurringPlan, updateRecurringPlanStatus, runRecurringPlan, removeCompanyAssetBackgroundPreview, rejectDevis, runAutomaticReminders, sendDevis, sendInvoiceEmail, sendTestEmail, signDevis, signInvoice, signPublicContract, printInvoicePdf, refreshAccessToken, updateCustomer, updateDevis, updateInvoice, updateCompanySettings, updateThemePreference, updateInvoiceStatus, updateProduct, updateUser, uploadCompanySignature, uploadCompanyStamp, } from '@/lib/api';
+import { approveDevis, cancelDevisSignature, cancelInvoiceSignature, changePassword, convertDevisToInvoice, createDevis, createInvoice, createCustomer, createProduct, createUser, createReminder, deleteCompanySignature, deleteCompanyStamp, deleteCustomer, deleteDevis, deleteDraftDevis, downloadDevisPdf, downloadInvoicePdf, downloadInvoicesExcel, getCompanySettings, getCustomers, getCustomerById, getCurrentUser, getDevis, getDevisById, getEmailDeliveryStatus, getInvoiceById, getInvoiceDashboard, getInvoices, getPayments, getPublicContract, getRecurringPlans, getProducts, getReceivablesAgingReport, getRecentEmailLogs, getReminders, getTaxSummaryReport, getUsers, getRbacPermissions, getRbacRoles, getRbacUsers, assignRbacPermissions, assignRbacUserRole, getRbacUserClients, assignRbacUserClients, createRbacPermission, createRbacRole, deleteRbacRole, clearAuthSession, login, logout, recordPayment, createRecurringPlan, updateRecurringPlanStatus, runRecurringPlan, removeCompanyAssetBackgroundPreview, rejectDevis, runAutomaticReminders, sendDevis, sendInvoiceEmail, sendTestEmail, signDevis, signInvoice, signPublicContract, printInvoicePdf, refreshAccessToken, updateCustomer, updateDevis, updateInvoice, updateCompanySettings, updateThemePreference, updateInvoiceStatus, updateProduct, updateUser, uploadCompanySignature, uploadCompanyStamp, generateTelegramLinkCode, } from '@/lib/api';
 import type { AiAssistantContext } from '@/lib/api';
 import type { CompanySettings, CreateDevisForm, CreateProductForm, CreateUserForm, Customer, CreateInvoiceForm, CreditNoteStatus, DashboardPeriod, DashboardStats, Devis, DevisItemForm, DevisStatus, Invoice, InvoiceItemForm, InvoiceStatus, PaymentMethod, Reminder, ReminderStatus, ReminderType, RecurringFrequency, RecurringPlanStatus, ThemePreference, UpdateCompanySettingsForm, UpdateProductForm, UpdateUserForm, User, UserRole, } from '@/types';
 type InvoiceSummary = {
@@ -370,6 +370,9 @@ function App() {
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmNewPassword, setConfirmNewPassword] = useState('');
+    const [telegramLinkCode, setTelegramLinkCode] = useState("");
+const [telegramLinkExpiresAt, setTelegramLinkExpiresAt] = useState("");
+   
     const [companyForm, setCompanyForm] = useState<UpdateCompanySettingsForm>({
         name: '',
         address: '',
@@ -638,6 +641,27 @@ function App() {
             setActionMessage(getApiErrorMessage(error, t("audit.text0010")));
         },
     });
+
+    const telegramLinkMutation = useMutation({
+  mutationFn: generateTelegramLinkCode,
+
+  onSuccess: (result) => {
+    setTelegramLinkCode(result.code);
+    setTelegramLinkExpiresAt(result.expiresAt);
+
+    toast.success("Telegram linking code generated");
+  },
+
+  onError: (error) => {
+    toast.error(
+      getApiErrorMessage(
+        error,
+        "Unable to generate Telegram linking code"
+      )
+    );
+  },
+});
+
     const signInvoiceMutation = useMutation({
         mutationFn: signInvoice,
         onSuccess: (invoice) => {
@@ -4007,6 +4031,74 @@ function App() {
                   </div>
                 </form>
               </div>
+              <div className="rounded-lg border border-slate-200 bg-white p-4">
+  <div className="flex flex-col gap-4">
+    <div>
+      <h3 className="text-sm font-semibold text-slate-900">
+        Telegram Integration
+      </h3>
+      <p className="mt-1 text-xs text-slate-500">
+        Connect your ERP account to Telegram to securely access the AI Assistant.
+      </p>
+    </div>
+
+    {!telegramLinkCode ? (
+      <button
+        type="button"
+        onClick={() => telegramLinkMutation.mutate()}
+        disabled={telegramLinkMutation.isPending}
+        className="inline-flex w-fit items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {telegramLinkMutation.isPending
+          ? "Generating..."
+          : "Connect Telegram"}
+      </button>
+    ) : (
+      <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+        <div>
+          <p className="text-xs font-medium text-slate-500">
+            Your secure linking code
+          </p>
+
+          <p className="mt-1 font-mono text-xl font-bold tracking-wider text-slate-900">
+            {telegramLinkCode}
+          </p>
+        </div>
+
+        <p className="text-xs text-slate-500">
+          Valid for 15 minutes.
+        </p>
+
+        <div>
+          <p className="text-xs text-slate-500">
+            Send this command to the Telegram bot:
+          </p>
+
+          <code className="mt-1 block rounded-md bg-slate-900 px-3 py-2 text-sm text-white">
+            /link {telegramLinkCode}
+          </code>
+        </div>
+
+        <button
+          type="button"
+          onClick={() =>
+            navigator.clipboard.writeText(`/link ${telegramLinkCode}`)
+          }
+          className="inline-flex w-fit items-center justify-center rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+        >
+          Copy command
+        </button>
+
+        {telegramLinkExpiresAt && (
+          <p className="text-xs text-slate-400">
+            Expires at:{" "}
+            {new Date(telegramLinkExpiresAt).toLocaleTimeString()}
+          </p>
+        )}
+      </div>
+    )}
+  </div>
+</div>
 
               {companySettingsQuery.isLoading ? (<p className="text-sm text-slate-500">{t("app.text0277")}</p>) : (<form className="space-y-4" onSubmit={handleCompanySettingsSubmit}>
                   <div className="grid gap-3 md:grid-cols-2">
@@ -6308,7 +6400,7 @@ function getHttpStatus(error: unknown) {
     return undefined;
 }
 function getApiErrorMessage(error: unknown, fallback: string) {
-    if (typeof error === 'object' &&
+    const message = (typeof error === 'object' &&
         error !== null &&
         'response' in error &&
         typeof error.response === 'object' &&
@@ -6317,13 +6409,16 @@ function getApiErrorMessage(error: unknown, fallback: string) {
         typeof error.response.data === 'object' &&
         error.response.data !== null &&
         'message' in error.response.data &&
-        typeof error.response.data.message === 'string') {
-        return error.response.data.message;
-    }
-    if (error instanceof Error && error.message) {
-        return error.message;
-    }
-    return fallback;
+        typeof error.response.data.message === 'string')
+        ? error.response.data.message
+        : error instanceof Error && error.message
+            ? error.message
+            : fallback;
+    const translations: Record<string, string> = {
+        'Only active or sent contracts can be invoiced': t('aiAssistant.errors.contractNotInvoiceable'),
+        'Contract signature workflow is incomplete': t('aiAssistant.errors.contractSignatureIncomplete'),
+    };
+    return translations[message] ?? message;
 }
 function getLocalizedDevisErrorMessage(error: unknown, fallback: string, translate: (key: string) => string) {
     const message = getApiErrorMessage(error, fallback);

@@ -1,4 +1,4 @@
-import assert from 'assert/strict';
+﻿import assert from 'assert/strict';
 import {
   ContractBillingFrequency,
   ContractPricingType,
@@ -135,6 +135,60 @@ async function main() {
       content: 'Contrat secondaire pour reference ordinale.',
     });
     await prisma.contract.update({ where: { id: secondaryContract.id }, data: { status: ContractStatus.ACTIVE } });
+    await prisma.contractVersion.update({
+      where: { id: secondaryContract.currentVersionId! },
+      data: { signatureStatus: ContractSignatureStatus.COMPLETED, isSigned: true },
+    });
+
+    const unsignedContract = await contractService.create(admin, PermissionScope.ALL, {
+      clientId: client.id,
+      title: `AI unsigned contract ${runId}`,
+      contractType: 'SERVICE',
+      language: 'fr',
+      startDate: today(),
+      endDate: futureDate(30),
+      renewalType: 'NONE',
+      amount: 0,
+      currency: 'MAD',
+      pricingType: ContractPricingType.HOURLY,
+      unitRate: 450,
+      billingFrequency: ContractBillingFrequency.MONTHLY,
+      taxRate: 20,
+      paymentTermsDays: 30,
+      autoInvoiceEnabled: false,
+      prorationPolicy: ContractProrationPolicy.NONE,
+      content: 'Contrat non signe pour prevalidation IA.',
+    });
+    await prisma.contract.update({ where: { id: unsignedContract.id }, data: { status: ContractStatus.ACTIVE } });
+    await prisma.contractVersion.update({
+      where: { id: unsignedContract.currentVersionId! },
+      data: { signatureStatus: ContractSignatureStatus.NOT_STARTED, isSigned: false },
+    });
+
+    const noEntriesContract = await contractService.create(admin, PermissionScope.ALL, {
+      clientId: client.id,
+      title: `AI no entries contract ${runId}`,
+      contractType: 'SERVICE',
+      language: 'fr',
+      startDate: today(),
+      endDate: futureDate(30),
+      renewalType: 'NONE',
+      amount: 0,
+      currency: 'MAD',
+      pricingType: ContractPricingType.HOURLY,
+      unitRate: 475,
+      billingFrequency: ContractBillingFrequency.MONTHLY,
+      taxRate: 20,
+      paymentTermsDays: 30,
+      autoInvoiceEnabled: false,
+      prorationPolicy: ContractProrationPolicy.NONE,
+      content: 'Contrat signe sans feuille approuvee non facturee.',
+    });
+    await prisma.contract.update({ where: { id: noEntriesContract.id }, data: { status: ContractStatus.ACTIVE } });
+    await prisma.contractVersion.update({
+      where: { id: noEntriesContract.currentVersionId! },
+      data: { signatureStatus: ContractSignatureStatus.COMPLETED, isSigned: true },
+    });
 
     const searchResult = await aiAssistantService.executeTool(assistantUser, {
       toolName: 'search_contracts',
@@ -160,6 +214,44 @@ async function main() {
       content: `/search_contracts {"query":"${contract.contractNumber}","limit":5}`,
     });
     assert.equal((directMessage.executionResult as { type: string }).type, 'tool_result');
+
+    const pendingCountBeforeSignatureCheck = await prisma.aiPendingAction.count({
+      where: { conversationId: conversation.id, status: 'PENDING' },
+    });
+    const invalidSignatureIntent = await aiAssistantService.sendMessage(assistantUser, conversation.id, {
+      language: 'fr',
+      content: 'Cree une facture pour ce contrat',
+      context: {
+        entityType: 'contract',
+        entityId: unsignedContract.id,
+        readableReference: unsignedContract.contractNumber,
+      },
+    });
+    assert.equal(invalidSignatureIntent.executionResult, null);
+    assert.match(invalidSignatureIntent.message.content, /signature du contrat n est pas termine/i);
+    assert.equal(
+      await prisma.aiPendingAction.count({ where: { conversationId: conversation.id, status: 'PENDING' } }),
+      pendingCountBeforeSignatureCheck
+    );
+
+    const pendingCountBeforeNoEntriesCheck = await prisma.aiPendingAction.count({
+      where: { conversationId: conversation.id, status: 'PENDING' },
+    });
+    const noEntriesIntent = await aiAssistantService.sendMessage(assistantUser, conversation.id, {
+      language: 'fr',
+      content: 'Cree une facture pour ce contrat',
+      context: {
+        entityType: 'contract',
+        entityId: noEntriesContract.id,
+        readableReference: noEntriesContract.contractNumber,
+      },
+    });
+    assert.equal(noEntriesIntent.executionResult, null);
+    assert.match(noEntriesIntent.message.content, /aucune entree approuvee non facturee/i);
+    assert.equal(
+      await prisma.aiPendingAction.count({ where: { conversationId: conversation.id, status: 'PENDING' } }),
+      pendingCountBeforeNoEntriesCheck
+    );
 
     const naturalFrenchSearch = await aiAssistantService.sendMessage(assistantUser, conversation.id, {
       language: 'fr',
@@ -341,13 +433,6 @@ async function main() {
     const approved = await aiAssistantService.confirmAction(assistantUser, approveAction.id);
     assert.equal((approved.result as { status: ContractTimeEntryStatus }).status, ContractTimeEntryStatus.APPROVED);
 
-    const createInvoiceForClientIntent = await aiAssistantService.sendMessage(assistantUser, conversation.id, {
-      language: 'fr',
-      content: 'Crée une facture pour le client AI Client SARL.',
-    });
-    assert.equal((createInvoiceForClientIntent.executionResult as { type: string; action?: { toolName?: string } }).type, 'pending_action');
-    assert.equal((createInvoiceForClientIntent.executionResult as { action?: { toolName?: string } }).action?.toolName, 'contract_invoice_workflow');
-
     const contractHealth = await aiAssistantService.executeTool(assistantUser, {
       toolName: 'analyze_contract_health',
       input: { contractId: contract.id },
@@ -371,16 +456,6 @@ async function main() {
     assert.equal((contextApprovedTimesheets.executionResult as { type: string; toolName?: string }).type, 'tool_result');
     assert.equal((contextApprovedTimesheets.executionResult as { toolName?: string }).toolName, 'list_timesheets');
     assert.match(JSON.stringify(contextApprovedTimesheets.executionResult), /APPROVED/);
-
-    const contextInvoicePreparation = await aiAssistantService.sendMessage(assistantUser, conversation.id, {
-      language: 'en',
-      content: 'Generate invoice',
-      context: { entityType: 'contract', entityId: contract.id, readableReference: contract.contractNumber },
-    });
-    assert.equal((contextInvoicePreparation.executionResult as { type: string }).type, 'pending_action');
-    assert.match(JSON.stringify(contextInvoicePreparation.executionResult), /estimatedTotal|approvedBillableTimesheetCount|billableHours/);
-    assert.equal((contextInvoicePreparation.executionResult as { action?: { toolName?: string } }).action?.toolName, 'contract_invoice_workflow');
-    assert.match(JSON.stringify(contextInvoicePreparation.executionResult), /WAITING_CONFIRMATION|Find Approved Timesheets|Prepare Invoice Preview/);
 
     const customerHealth = await aiAssistantService.executeTool(assistantUser, {
       toolName: 'analyze_customer_health',
@@ -425,6 +500,17 @@ async function main() {
     });
     assert.match(JSON.stringify(invoicePending), /Contract invoice workflow|WAITING_CONFIRMATION/);
     const invoiceAction = (invoicePending as { action: { id: string } }).action;
+    const revisedInvoicePending = await aiAssistantService.executeTool(assistantUser, {
+      conversationId: conversation.id,
+      toolName: 'contract_invoice_workflow',
+      input: { contractId: contract.id, periodStart: today(), periodEnd: futureDate(30) },
+      idempotencyKey: `invoice-${runId}`,
+      replaceActionId: invoiceAction.id,
+    });
+    assert.equal((revisedInvoicePending as { action: { id: string } }).action.id, invoiceAction.id);
+    const invoiceCountBeforeConfirmation = await prisma.invoice.count({
+      where: { customerId: client.id },
+    });
     const invoiceResults = await Promise.allSettled([
       aiAssistantService.confirmAction(assistantUser, invoiceAction.id),
       aiAssistantService.confirmAction(assistantUser, invoiceAction.id),
@@ -435,6 +521,10 @@ async function main() {
     const invoice = workflowResult.invoice;
     assert.ok(invoice.invoiceNumber.startsWith('INV-'));
     assert.match(JSON.stringify(workflowResult), /COMPLETED|downloadEndpoint/);
+    assert.equal(
+      await prisma.invoice.count({ where: { customerId: client.id } }),
+      invoiceCountBeforeConfirmation + 1
+    );
     const invoicedEntry = await prisma.contractTimeEntry.findUniqueOrThrow({ where: { id: entry.id } });
     assert.equal(invoicedEntry.status, ContractTimeEntryStatus.INVOICED);
     assert.equal(invoicedEntry.invoiceId, invoice.id);

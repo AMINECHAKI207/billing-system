@@ -28,6 +28,7 @@ import creditNoteReasonRouter from '@modules/credit-note/creditNoteReason.routes
 import contractRouter, { publicContractRouter } from '@modules/contract/contract.routes';
 import auditRouter from '@modules/audit/audit.routes';
 import aiAssistantRouter from '@modules/ai-assistant/aiAssistant.routes';
+import telegramRoutes from "./modules/telegram/telegram.routes";
 
 export function createApp(): Application {
   const app = express();
@@ -94,6 +95,7 @@ export function createApp(): Application {
   app.use('/api/users', userRouter);
   app.use('/api/rbac', rbacRouter);
   app.use('/api/recurring-plans', recurringRouter);
+  app.use('/api/telegram', telegramRoutes);
 
   app.use((_req: Request, res: Response) => {
     res.status(404).json({

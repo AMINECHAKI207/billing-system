@@ -1,4 +1,4 @@
-import {
+﻿import {
   AiToolRiskLevel,
   ContractBillingFrequency,
   ContractPricingType,
@@ -12,6 +12,10 @@ import {
   InvoiceStatus,
   PaymentMethod,
   PermissionScope,
+  RecurringFrequency,
+  RecurringPlanStatus,
+  ReminderStatus,
+  ReminderType,
   Role,
 } from '@prisma/client';
 import { z } from 'zod';
@@ -26,12 +30,14 @@ import { invoiceService } from '@modules/invoice/invoice.service';
 import { paymentService } from '@modules/payment/payment.service';
 import { productService } from '@modules/product/product.service';
 import { rbacService } from '@modules/rbac/rbac.service';
+import { recurringService } from '@modules/recurring/recurring.service';
+import { reminderService } from '@modules/reminder/reminder.service';
 import { reportService } from '@modules/report/report.service';
 import { settingsService } from '@modules/settings/settings.service';
 import { userService } from '@modules/user/user.service';
 import { ApiError } from '@utils/ApiError';
 import { AI_ASSISTANT_PERMISSIONS } from '../aiAssistant.permissions';
-import type { AiTool, ToolContext, ToolPreview } from './toolTypes';
+import type { AiLocalizedText, AiTool, ToolContext, ToolPreview } from './toolTypes';
 
 const uuid = z.string().uuid();
 const limit = z.coerce.number().int().min(1).max(50).default(10);
@@ -146,12 +152,6 @@ const invoiceCreateInput = z.object({
 
 const invoiceUpdateInput = invoiceCreateInput.omit({ status: true }).extend({ id: uuid }).strict();
 const invoiceStatusInput = z.object({ id: uuid, status: z.nativeEnum(InvoiceStatus) }).strict();
-const invoiceEmailInput = z.object({
-  invoiceId: uuid,
-  recipientEmail: z.string().email().optional(),
-  subject: z.string().trim().min(3).max(255).optional(),
-  message: z.string().trim().min(3).max(5000).optional(),
-}).strict();
 const invoicePaymentInput = z.object({
   invoiceId: uuid,
   amount: positiveMoney,
@@ -243,6 +243,113 @@ const expenseEmailInput = z.object({
   pdfLanguage: z.enum(['en', 'fr', 'ar']).optional().default('fr'),
 }).strict();
 
+const productInput = z.object({
+  name: z.string().trim().min(2).max(255),
+  description: z.string().trim().max(5000).optional().nullable(),
+  unit: z.string().trim().max(50).optional().nullable(),
+  unitPrice: money,
+  taxRate: z.coerce.number().min(0).max(100).default(20),
+  isActive: z.boolean().optional(),
+}).strict();
+const productUpdateInput = productInput.partial().extend({ id: uuid }).strict();
+
+const recurringItemInput = z.object({
+  description: z.string().trim().min(2).max(1000),
+  unit: z.string().trim().max(50).optional().nullable(),
+  quantity: z.coerce.number().positive(),
+  unitPrice: money,
+  taxRate: z.coerce.number().min(0).max(100).default(0),
+}).strict();
+const recurringCreateInput = z.object({
+  customerId: uuid,
+  name: z.string().trim().min(2).max(255),
+  frequency: z.nativeEnum(RecurringFrequency),
+  intervalCount: z.coerce.number().int().min(1).max(24).default(1),
+  startDate: dateString,
+  endDate: dateString.optional().nullable(),
+  dueDays: z.coerce.number().int().min(0).max(365).default(30),
+  autoSend: z.boolean().default(false),
+  currency,
+  discount: money.default(0),
+  notes: z.string().trim().max(5000).optional().nullable(),
+  terms: z.string().trim().max(5000).optional().nullable(),
+  items: z.array(recurringItemInput).min(1),
+}).strict();
+const recurringUpdateInput = recurringCreateInput.partial().extend({ id: uuid }).strict();
+const recurringQueryInput = searchListInput.extend({
+  status: z.nativeEnum(RecurringPlanStatus).optional(),
+  customerId: uuid.optional(),
+}).strict();
+const recurringStatusInput = z.object({
+  id: uuid,
+  status: z.enum(['ACTIVE', 'PAUSED', 'CANCELLED']),
+}).strict();
+
+const reminderQueryInput = searchListInput.extend({
+  invoiceId: uuid.optional(),
+  status: z.nativeEnum(ReminderStatus).optional(),
+  type: z.nativeEnum(ReminderType).optional(),
+}).strict();
+const reminderCreateInput = z.object({
+  invoiceId: uuid,
+  type: z.nativeEnum(ReminderType).default(ReminderType.MANUAL),
+  recipientEmail: z.string().email().optional(),
+  subject: z.string().trim().min(3).max(255).optional(),
+  body: z.string().trim().min(10).max(10000).optional(),
+  sendEmail: z.boolean().default(true),
+}).strict();
+
+const expenseCategoryInput = z.object({
+  name: z.string().trim().min(2).max(120),
+  active: z.boolean().optional(),
+}).strict();
+const expenseCategoryUpdateInput = expenseCategoryInput.partial().extend({ id: uuid }).strict();
+const expenseTypeInput = z.object({
+  categoryId: uuid,
+  name: z.string().trim().min(2).max(120),
+  active: z.boolean().optional(),
+}).strict();
+const expenseTypeUpdateInput = expenseTypeInput.partial().extend({ id: uuid }).strict();
+const expenseExportInput = z.object({
+  ids: z.array(uuid).max(250).optional(),
+  filters: z.object({
+    search: z.string().trim().optional(),
+    categoryId: uuid.optional(),
+    expenseTypeId: uuid.optional(),
+    source: z.nativeEnum(ExpenseSource).optional(),
+    status: z.nativeEnum(ExpenseNoteStatus).optional(),
+    employeeId: uuid.optional(),
+    amountMin: z.coerce.number().min(0).optional(),
+    amountMax: z.coerce.number().min(0).optional(),
+    dateFrom: optionalDate,
+    dateTo: optionalDate,
+    currency: z.string().trim().min(3).max(10).optional(),
+    hasReceipt: z.boolean().optional(),
+    hasWarnings: z.boolean().optional(),
+    aiConfidenceMin: z.coerce.number().min(0).max(100).optional(),
+  }).strict().optional().default({}),
+  format: z.enum(['pdf', 'zip', 'excel', 'csv']).default('excel'),
+  language: z.enum(['en', 'fr', 'ar']).optional().default('fr'),
+  includeReceipts: z.boolean().optional().default(false),
+}).strict().superRefine((value, ctx) => {
+  if ((!value.ids || value.ids.length === 0) && Object.keys(value.filters ?? {}).length === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['ids'],
+      message: 'Select expenses or provide filters for export',
+    });
+  }
+});
+const expenseEmailLogInput = z.object({ emailLogId: uuid }).strict();
+const expenseAttachmentInput = z.object({ attachmentId: uuid }).strict();
+
+const settingsAssetKind = z.enum(['signature', 'stamp']);
+const settingsAssetInput = z.object({ kind: settingsAssetKind }).strict();
+const permissionCreateInput = z.object({
+  key: z.string().trim().min(3).max(255),
+  description: z.string().trim().max(1000).optional().nullable(),
+}).strict();
+
 const roleInput = z.object({
   name: z.string().trim().min(2).max(80),
   description: z.string().trim().max(500).optional().nullable(),
@@ -316,17 +423,190 @@ function erpScope(context: ToolContext, permission: string, assistantPermission:
   return permissionScope(context.user.permissionScopes, permission);
 }
 
-function preview(title: string, description: string, summary: Record<string, unknown>): ToolPreview {
-  return { title, description, summary };
+const INTERNAL_ID_SUFFIX = /[a-z0-9]Id$/;
+const SENSITIVE_FIELD_KEYWORDS = /(hash|token|secret|password|cookie|authorization)/i;
+
+function isInternalPreviewField(key: string): boolean {
+  if (key.toLowerCase() === 'id') return true;
+  if (INTERNAL_ID_SUFFIX.test(key)) return true;
+  return SENSITIVE_FIELD_KEYWORDS.test(key);
 }
 
-function binaryResult(fileName: string, buffer: Buffer) {
-  return {
-    fileName,
-    size: buffer.length,
-    generated: true,
-  };
+function sanitizePreviewSummary(summary: Record<string, unknown>): Record<string, unknown> {
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(summary)) {
+    if (isInternalPreviewField(key)) continue;
+    sanitized[key] = value;
+  }
+  return sanitized;
 }
+
+function preview(title: string, description: string, summary: Record<string, unknown>): ToolPreview {
+  return { title, description, summary: sanitizePreviewSummary(summary) };
+}
+
+function text(fr: string, en: string, ar: string): AiLocalizedText {
+  return { fr, en, ar };
+}
+
+function option(value: string, fr: string, en: string, ar: string) {
+  return { value, label: text(fr, en, ar) };
+}
+
+async function resolveCustomerDisplayValue(value: unknown, draft: Record<string, unknown>, context: ToolContext) {
+  if (typeof draft.customerName === 'string' && draft.customerName.trim()) return draft.customerName.trim();
+  if (typeof draft.clientName === 'string' && draft.clientName.trim()) return draft.clientName.trim();
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const customer = await customerService.getCustomerById(value, context.user.id, permissionScope(context.user.permissionScopes, 'clients.view'));
+    return customer.company || customer.name || value;
+  } catch {
+    return value;
+  }
+}
+
+async function resolveContractCustomerDisplayValue(value: unknown, _draft: Record<string, unknown>, context: ToolContext) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const customer = await customerService.getCustomerById(value, context.user.id, permissionScope(context.user.permissionScopes, 'clients.view'));
+    return customer.company || customer.name || value;
+  } catch {
+    return value;
+  }
+}
+
+async function resolveInvoiceDisplayValue(value: unknown, _draft: Record<string, unknown>, context: ToolContext) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const invoice = await invoiceService.getInvoiceById(value, context.user.id, permissionScope(context.user.permissionScopes, 'invoices.view'));
+    return invoice.invoiceNumber || value;
+  } catch {
+    return value;
+  }
+}
+
+async function resolveExpenseCategoryDisplayValue(value: unknown) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const categories = await expenseService.listCategories({ active: true });
+    const category = categories.find((entry) => entry.id === value);
+    return category?.name ?? value;
+  } catch {
+    return value;
+  }
+}
+
+async function resolveExpenseTypeDisplayValue(value: unknown) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const types = await expenseService.listTypes({ active: true });
+    const type = types.find((entry) => entry.id === value);
+    return type?.name ?? value;
+  } catch {
+    return value;
+  }
+}
+
+async function resolveUserDisplayValue(value: unknown) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const users = await userService.getUsers({ page: '1', limit: '50' });
+    const user = users.data.find((entry) => entry.id === value);
+    return user ? `${user.name} (${user.email})` : value;
+  } catch {
+    return value;
+  }
+}
+
+async function resolveRoleDisplayValue(value: unknown) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const roles = await rbacService.listRoles();
+    const role = roles.find((entry) => entry.id === value);
+    return role?.name ?? value;
+  } catch {
+    return value;
+  }
+}
+
+async function resolvePermissionDisplayValue(value: unknown) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const permissions = await rbacService.listPermissions();
+    const permission = permissions.find((entry) => entry.id === value);
+    return permission?.key ?? value;
+  } catch {
+    return value;
+  }
+}
+
+async function resolveCreditNoteReasonDisplayValue(value: unknown) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const reasons = await creditNoteService.getReasons(false);
+    const reason = reasons.find((entry) => entry.id === value);
+    return reason?.nameFr || reason?.nameEn || reason?.code || value;
+  } catch {
+    return value;
+  }
+}
+
+function currencyOptions() {
+  return [
+    option('MAD', 'Dirham marocain (MAD)', 'Moroccan dirham (MAD)', 'Ø§Ù„Ø¯Ø±Ù‡Ù… Ø§Ù„Ù…ØºØ±Ø¨ÙŠ (MAD)'),
+    option('EUR', 'Euro (EUR)', 'Euro (EUR)', 'Ø§Ù„ÙŠÙˆØ±Ùˆ (EUR)'),
+    option('USD', 'Dollar amÃ©ricain (USD)', 'US dollar (USD)', 'Ø§Ù„Ø¯ÙˆÙ„Ø§Ø± Ø§Ù„Ø£Ù…Ø±ÙŠÙƒÙŠ (USD)'),
+  ];
+}
+
+const invoiceLineItemFields = [
+  { path: 'description', type: 'text', label: text('Description', 'Description', 'Ø§Ù„ÙˆØµÙ'), required: true, placeholder: text('Prestation ou produit', 'Service or product', 'Ø§Ù„Ø®Ø¯Ù…Ø© Ø£Ùˆ Ø§Ù„Ù…Ù†ØªØ¬') },
+  { path: 'quantity', type: 'number', label: text('QuantitÃ©', 'Quantity', 'Ø§Ù„ÙƒÙ…ÙŠØ©'), required: true, defaultValue: 1 },
+  { path: 'unitPrice', type: 'currency', label: text('Prix unitaire', 'Unit price', 'Ø³Ø¹Ø± Ø§Ù„ÙˆØ­Ø¯Ø©'), required: true, defaultValue: 0 },
+  { path: 'taxRate', type: 'number', label: text('TVA %', 'VAT %', 'Ù†Ø³Ø¨Ø© Ø§Ù„Ø¶Ø±ÙŠØ¨Ø© %'), defaultValue: 20 },
+  { path: 'unit', type: 'text', label: text('UnitÃ©', 'Unit', 'Ø§Ù„ÙˆØ­Ø¯Ø©'), placeholder: text('heure, jour, piÃ¨ceâ€¦', 'hour, day, unitâ€¦', 'Ø³Ø§Ø¹Ø©ØŒ ÙŠÙˆÙ…ØŒ ÙˆØ­Ø¯Ø©â€¦') },
+] as const;
+
+const quoteLineItemFields = [
+  ...invoiceLineItemFields,
+  { path: 'discount', type: 'currency', label: text('Remise', 'Discount', 'Ø§Ù„Ø®ØµÙ…'), defaultValue: 0 },
+] as const;
+
+const paymentMethodOptions = [
+  option('BANK_TRANSFER', 'Virement bancaire', 'Bank transfer', '????? ????'),
+  option('CASH', 'Especes', 'Cash', '????'),
+  option('CHECK', 'Cheque', 'Check', '???'),
+  option('CARD', 'Carte', 'Card', '?????'),
+  option('OTHER', 'Autre', 'Other', '????'),
+] as const;
+
+const expenseSourceOptions = [
+  option('MANUAL', 'Manuel', 'Manual', '????'),
+  option('AI', 'IA', 'AI', '???? ???????'),
+] as const;
+
+const recurringFrequencyOptions = [
+  option('WEEKLY', 'Hebdomadaire', 'Weekly', '??????'),
+  option('MONTHLY', 'Mensuel', 'Monthly', '????'),
+  option('QUARTERLY', 'Trimestriel', 'Quarterly', '??? ????'),
+  option('YEARLY', 'Annuel', 'Yearly', '????'),
+] as const;
+
+const reminderTypeOptions = [
+  option('MANUAL', 'Manuel', 'Manual', '????'),
+  option('AUTOMATIC', 'Automatique', 'Automatic', '??????'),
+] as const;
+
+const roleOptions = [
+  option('ADMIN', 'Administrateur', 'Administrator', '?????'),
+  option('EMPLOYEE', 'Employe', 'Employee', '????'),
+] as const;
+
+const permissionScopeOptions = [
+  option('ALL', 'Tous', 'All', '????'),
+  option('OWN', 'Propre', 'Own', '?????'),
+  option('SELECTED', 'Selection', 'Selected', '????'),
+] as const;
 
 export const erpTools: AiTool[] = [
   {
@@ -354,6 +634,22 @@ export const erpTools: AiTool[] = [
     requiredPermission: 'clients.create',
     riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
     schema: customerInput,
+    form: {
+      title: text('CrÃ©er un client', 'Create customer', 'Ø¥Ù†Ø´Ø§Ø¡ Ø¹Ù…ÙŠÙ„'),
+      description: text('ComplÃ©tez les informations client avant de gÃ©nÃ©rer la prÃ©visualisation.', 'Complete the customer information before generating the preview.', 'Ø£ÙƒÙ…Ù„ Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø¹Ù…ÙŠÙ„ Ù‚Ø¨Ù„ Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ù…Ø¹Ø§ÙŠÙ†Ø©.'),
+      fields: [
+        { path: 'name', type: 'text', label: text('Nom du client', 'Customer name', 'Ø§Ø³Ù… Ø§Ù„Ø¹Ù…ÙŠÙ„'), required: true },
+        { path: 'email', type: 'text', label: text('Email', 'Email', 'Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ø¥Ù„ÙƒØªØ±ÙˆÙ†ÙŠ'), required: true },
+        { path: 'phone', type: 'text', label: text('TÃ©lÃ©phone', 'Phone', 'Ø§Ù„Ù‡Ø§ØªÙ') },
+        { path: 'company', type: 'text', label: text('SociÃ©tÃ©', 'Company', 'Ø§Ù„Ø´Ø±ÙƒØ©') },
+        { path: 'address', type: 'textarea', label: text('Adresse', 'Address', 'Ø§Ù„Ø¹Ù†ÙˆØ§Ù†') },
+        { path: 'city', type: 'text', label: text('Ville', 'City', 'Ø§Ù„Ù…Ø¯ÙŠÙ†Ø©') },
+        { path: 'country', type: 'text', label: text('Pays', 'Country', 'Ø§Ù„Ø¯ÙˆÙ„Ø©'), required: true },
+        { path: 'countryCode', type: 'text', label: text('Code pays', 'Country code', 'Ø±Ù…Ø² Ø§Ù„Ø¯ÙˆÙ„Ø©'), required: true, placeholder: text('MA, FR, USâ€¦', 'MA, FR, USâ€¦', 'MA Ø£Ùˆ FR Ø£Ùˆ USâ€¦') },
+        { path: 'postalCode', type: 'text', label: text('Code postal', 'Postal code', 'Ø§Ù„Ø±Ù…Ø² Ø§Ù„Ø¨Ø±ÙŠØ¯ÙŠ') },
+        { path: 'taxNumber', type: 'text', label: text('NumÃ©ro fiscal', 'Tax number', 'Ø§Ù„Ø±Ù‚Ù… Ø§Ù„Ø¶Ø±ÙŠØ¨ÙŠ') },
+      ],
+    },
     preview: async (input) => preview('Create customer', 'A new customer will be created after confirmation.', input),
     execute: (input, context) => customerService.createCustomer(context.user.id, input),
   },
@@ -364,6 +660,42 @@ export const erpTools: AiTool[] = [
     requiredPermission: 'clients.update',
     riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
     schema: customerUpdateInput,
+    form: {
+      title: text('Modifier un client', 'Update customer', 'تعديل عميل'),
+      description: text('Ajustez les informations du client avant la previsualisation.', 'Adjust the customer information before preview.', 'عدّل بيانات العميل قبل المعاينة.'),
+      buildInitialValue: async (partialInput, context) => {
+        if (typeof partialInput.id !== 'string') return {};
+        const customer = await customerService.getCustomerById(partialInput.id, context.user.id, erpScope(context, 'clients.view'));
+        return {
+          id: customer.id,
+          name: customer.name,
+          email: customer.email,
+          phone: customer.phone ?? '',
+          company: customer.company ?? '',
+          address: customer.address ?? '',
+          city: customer.city ?? '',
+          country: customer.country,
+          countryCode: customer.countryCode,
+          postalCode: customer.postalCode ?? '',
+          taxNumber: customer.taxNumber ?? '',
+          isActive: customer.isActive,
+        };
+      },
+      fields: [
+        { path: 'id', type: 'entity', entityType: 'customer', label: text('Client', 'Customer', 'العميل'), required: true, readOnly: true, resolveDisplayValue: resolveCustomerDisplayValue },
+        { path: 'name', type: 'text', label: text('Nom du client', 'Customer name', 'اسم العميل') },
+        { path: 'email', type: 'text', label: text('Email', 'Email', 'البريد الالكتروني') },
+        { path: 'phone', type: 'text', label: text('Telephone', 'Phone', 'الهاتف') },
+        { path: 'company', type: 'text', label: text('Societe', 'Company', 'الشركة') },
+        { path: 'address', type: 'textarea', label: text('Adresse', 'Address', 'العنوان') },
+        { path: 'city', type: 'text', label: text('Ville', 'City', 'المدينة') },
+        { path: 'country', type: 'text', label: text('Pays', 'Country', 'الدولة') },
+        { path: 'countryCode', type: 'text', label: text('Code pays', 'Country code', 'رمز الدولة') },
+        { path: 'postalCode', type: 'text', label: text('Code postal', 'Postal code', 'الرمز البريدي') },
+        { path: 'taxNumber', type: 'text', label: text('Numero fiscal', 'Tax number', 'الرقم الضريبي') },
+        { path: 'isActive', type: 'boolean', label: text('Actif', 'Active', 'نشط') },
+      ],
+    },
     preview: async (input) => preview('Update customer', 'The customer record will be updated after confirmation.', input),
     execute: ({ id, ...data }, context) => customerService.updateCustomer(id, context.user.id, erpScope(context, 'clients.update', AI_ASSISTANT_PERMISSIONS.useWriteTools), data),
   },
@@ -384,6 +716,45 @@ export const erpTools: AiTool[] = [
     requiredPermission: 'contracts.create',
     riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
     schema: contractCreateInput,
+    form: {
+      title: text('CrÃ©er un contrat', 'Create contract', 'Ø¥Ù†Ø´Ø§Ø¡ Ø¹Ù‚Ø¯'),
+      description: text('Renseignez les informations contractuelles avant de gÃ©nÃ©rer la prÃ©visualisation.', 'Complete the contract information before generating the preview.', 'Ø£ÙƒÙ…Ù„ Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø¹Ù‚Ø¯ Ù‚Ø¨Ù„ Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ù…Ø¹Ø§ÙŠÙ†Ø©.'),
+      buildInitialValue: async () => {
+        const settings = await settingsService.getCompanySettings();
+        return {
+          language: 'fr',
+          contractType: 'GENERAL',
+          renewalType: ContractRenewalType.NONE,
+          currency: settings.defaultCurrency,
+          pricingType: ContractPricingType.FIXED,
+          billingFrequency: ContractBillingFrequency.ONE_TIME,
+          taxRate: Number(settings.defaultTaxRate ?? 20),
+          paymentTermsDays: 30,
+          autoInvoiceEnabled: false,
+          prorationPolicy: ContractProrationPolicy.NONE,
+        };
+      },
+      fields: [
+        { path: 'clientId', type: 'entity', entityType: 'customer', label: text('Client', 'Customer', 'Ø§Ù„Ø¹Ù…ÙŠÙ„'), required: true, resolveDisplayValue: resolveContractCustomerDisplayValue },
+        { path: 'title', type: 'text', label: text('Titre du contrat', 'Contract title', 'Ø¹Ù†ÙˆØ§Ù† Ø§Ù„Ø¹Ù‚Ø¯'), required: true },
+        { path: 'contractType', type: 'text', label: text('Type de contrat', 'Contract type', 'Ù†ÙˆØ¹ Ø§Ù„Ø¹Ù‚Ø¯'), required: true },
+        { path: 'language', type: 'select', label: text('Langue', 'Language', 'Ø§Ù„Ù„ØºØ©'), required: true, options: [option('fr', 'FranÃ§ais', 'French', 'Ø§Ù„ÙØ±Ù†Ø³ÙŠØ©'), option('en', 'Anglais', 'English', 'Ø§Ù„Ø¥Ù†Ø¬Ù„ÙŠØ²ÙŠØ©'), option('ar', 'Arabe', 'Arabic', 'Ø§Ù„Ø¹Ø±Ø¨ÙŠØ©')] },
+        { path: 'startDate', type: 'date', label: text('Date de dÃ©but', 'Start date', 'ØªØ§Ø±ÙŠØ® Ø§Ù„Ø¨Ø¯Ø§ÙŠØ©') },
+        { path: 'endDate', type: 'date', label: text('Date de fin', 'End date', 'ØªØ§Ø±ÙŠØ® Ø§Ù„Ù†Ù‡Ø§ÙŠØ©') },
+        { path: 'currency', type: 'select', label: text('Devise', 'Currency', 'Ø§Ù„Ø¹Ù…Ù„Ø©'), required: true, options: currencyOptions() },
+        { path: 'pricingType', type: 'select', label: text('Tarification', 'Pricing type', 'Ù†ÙˆØ¹ Ø§Ù„ØªØ³Ø¹ÙŠØ±'), required: true, options: [option('FIXED', 'Forfait', 'Fixed fee', 'Ù…Ø¨Ù„Øº Ø«Ø§Ø¨Øª'), option('HOURLY', 'Horaire', 'Hourly', 'Ø¨Ø§Ù„Ø³Ø§Ø¹Ø©'), option('DAILY', 'Journalier', 'Daily', 'ÙŠÙˆÙ…ÙŠ'), option('MONTHLY', 'Mensuel', 'Monthly', 'Ø´Ù‡Ø±ÙŠ'), option('CUSTOM', 'PersonnalisÃ©', 'Custom', 'Ù…Ø®ØµØµ')] },
+        { path: 'fixedAmount', type: 'currency', label: text('Montant forfaitaire', 'Fixed amount', 'Ø§Ù„Ù…Ø¨Ù„Øº Ø§Ù„Ø«Ø§Ø¨Øª') },
+        { path: 'unitRate', type: 'currency', label: text('Tarif unitaire', 'Unit rate', 'Ø§Ù„Ø³Ø¹Ø± Ø§Ù„ÙˆØ­Ø¯ÙˆÙŠ') },
+        { path: 'estimatedQuantity', type: 'number', label: text('QuantitÃ© estimÃ©e', 'Estimated quantity', 'Ø§Ù„ÙƒÙ…ÙŠØ© Ø§Ù„ØªÙ‚Ø¯ÙŠØ±ÙŠØ©') },
+        { path: 'billingFrequency', type: 'select', label: text('FrÃ©quence de facturation', 'Billing frequency', 'ÙˆØªÙŠØ±Ø© Ø§Ù„ÙÙˆØªØ±Ø©'), required: true, options: [option('ONE_TIME', 'Une seule fois', 'One time', 'Ù…Ø±Ø© ÙˆØ§Ø­Ø¯Ø©'), option('DAILY', 'Quotidienne', 'Daily', 'ÙŠÙˆÙ…ÙŠ'), option('WEEKLY', 'Hebdomadaire', 'Weekly', 'Ø£Ø³Ø¨ÙˆØ¹ÙŠ'), option('MONTHLY', 'Mensuelle', 'Monthly', 'Ø´Ù‡Ø±ÙŠ'), option('QUARTERLY', 'Trimestrielle', 'Quarterly', 'Ø±Ø¨Ø¹ Ø³Ù†ÙˆÙŠ'), option('SEMI_ANNUAL', 'Semestrielle', 'Semi annual', 'Ù†ØµÙ Ø³Ù†ÙˆÙŠ'), option('ANNUAL', 'Annuelle', 'Annual', 'Ø³Ù†ÙˆÙŠ')] },
+        { path: 'taxRate', type: 'number', label: text('TVA %', 'VAT %', 'Ù†Ø³Ø¨Ø© Ø§Ù„Ø¶Ø±ÙŠØ¨Ø© %') },
+        { path: 'paymentTermsDays', type: 'number', label: text('DÃ©lai de paiement (jours)', 'Payment terms (days)', 'Ø£Ø¬Ù„ Ø§Ù„Ø¯ÙØ¹ Ø¨Ø§Ù„Ø£ÙŠØ§Ù…') },
+        { path: 'billingDescription', type: 'textarea', label: text('Description de facturation', 'Billing description', 'ÙˆØµÙ Ø§Ù„ÙÙˆØªØ±Ø©') },
+        { path: 'summary', type: 'textarea', label: text('RÃ©sumÃ©', 'Summary', 'Ø§Ù„Ù…Ù„Ø®Øµ') },
+        { path: 'terms', type: 'textarea', label: text('Conditions', 'Terms', 'Ø§Ù„Ø´Ø±ÙˆØ·') },
+        { path: 'content', type: 'textarea', label: text('Contenu du contrat', 'Contract content', 'Ù…Ø­ØªÙˆÙ‰ Ø§Ù„Ø¹Ù‚Ø¯') },
+      ],
+    },
     preview: async (input) => preview('Create contract', 'A new contract will be created after confirmation.', input),
     execute: (input, context) => contractService.create(context.user, erpScope(context, 'contracts.create', AI_ASSISTANT_PERMISSIONS.useWriteTools), input),
   },
@@ -394,6 +765,66 @@ export const erpTools: AiTool[] = [
     requiredPermission: 'contracts.update',
     riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
     schema: contractUpdateInput,
+    form: {
+      title: text('Modifier un contrat', 'Update contract', 'تعديل عقد'),
+      description: text('Ajustez les champs du contrat avant la previsualisation.', 'Adjust the contract fields before preview.', 'عدّل حقول العقد قبل المعاينة.'),
+      buildInitialValue: async (partialInput, context) => {
+        if (typeof partialInput.id !== 'string') return {};
+        const contract = await contractService.getById(partialInput.id, context.user.id, erpScope(context, 'contracts.view'));
+        return {
+          id: contract.id,
+          title: contract.title,
+          contractType: contract.contractType,
+          language: contract.language,
+          startDate: contract.startDate ? new Date(contract.startDate).toISOString().slice(0, 10) : '',
+          endDate: contract.endDate ? new Date(contract.endDate).toISOString().slice(0, 10) : '',
+          renewalType: contract.renewalType,
+          renewalNoticeDays: contract.renewalNoticeDays ?? null,
+          amount: Number(contract.amount ?? 0),
+          currency: contract.currency,
+          pricingType: contract.pricingType,
+          unitRate: Number(contract.unitRate ?? 0),
+          estimatedQuantity: Number(contract.estimatedQuantity ?? 0),
+          fixedAmount: Number(contract.fixedAmount ?? 0),
+          billingFrequency: contract.billingFrequency,
+          billingDay: contract.billingDay ?? null,
+          billingStartDate: contract.billingStartDate ? new Date(contract.billingStartDate).toISOString().slice(0, 10) : '',
+          billingEndDate: contract.billingEndDate ? new Date(contract.billingEndDate).toISOString().slice(0, 10) : '',
+          minimumBillableUnits: Number(contract.minimumBillableUnits ?? 0),
+          includedUnits: Number(contract.includedUnits ?? 0),
+          overtimeRate: Number(contract.overtimeRate ?? 0),
+          taxRate: Number(contract.taxRate ?? 0),
+          paymentTermsDays: Number(contract.paymentTermsDays ?? 30),
+          autoInvoiceEnabled: contract.autoInvoiceEnabled,
+          nextInvoiceDate: contract.nextInvoiceDate ? new Date(contract.nextInvoiceDate).toISOString().slice(0, 10) : '',
+          lastInvoiceDate: contract.lastInvoiceDate ? new Date(contract.lastInvoiceDate).toISOString().slice(0, 10) : '',
+          prorationPolicy: contract.prorationPolicy,
+          billingDescription: contract.billingDescription ?? '',
+          summary: contract.summary ?? '',
+          terms: contract.terms ?? '',
+        };
+      },
+      fields: [
+        { path: 'id', type: 'text', label: text('Contrat', 'Contract', 'العقد'), required: true, hidden: true },
+        { path: 'title', type: 'text', label: text('Titre', 'Title', 'العنوان') },
+        { path: 'contractType', type: 'text', label: text('Type de contrat', 'Contract type', 'نوع العقد') },
+        { path: 'language', type: 'select', label: text('Langue', 'Language', 'اللغة'), options: [option('fr', 'Francais', 'French', 'الفرنسية'), option('en', 'Anglais', 'English', 'الانجليزية'), option('ar', 'Arabe', 'Arabic', 'العربية')] },
+        { path: 'startDate', type: 'date', label: text('Date de debut', 'Start date', 'تاريخ البداية') },
+        { path: 'endDate', type: 'date', label: text('Date de fin', 'End date', 'تاريخ الانتهاء') },
+        { path: 'amount', type: 'currency', label: text('Montant', 'Amount', 'المبلغ') },
+        { path: 'currency', type: 'select', label: text('Devise', 'Currency', 'العملة'), options: currencyOptions() },
+        { path: 'pricingType', type: 'select', label: text('Mode de tarification', 'Pricing type', 'نوع التسعير'), options: [option('FIXED', 'Forfait', 'Fixed', 'ثابت'), option('HOURLY', 'Horaire', 'Hourly', 'بالساعة'), option('DAILY', 'Journalier', 'Daily', 'يومي'), option('MONTHLY', 'Mensuel', 'Monthly', 'شهري'), option('CUSTOM', 'Personnalise', 'Custom', 'مخصص')] },
+        { path: 'unitRate', type: 'currency', label: text('Tarif unitaire', 'Unit rate', 'السعر الوحدوي') },
+        { path: 'fixedAmount', type: 'currency', label: text('Montant forfaitaire', 'Fixed amount', 'المبلغ الثابت') },
+        { path: 'billingFrequency', type: 'select', label: text('Frequence de facturation', 'Billing frequency', 'تكرار الفوترة'), options: [option('ONE_TIME', 'Une seule fois', 'One time', 'مرة واحدة'), option('DAILY', 'Quotidienne', 'Daily', 'يومي'), option('WEEKLY', 'Hebdomadaire', 'Weekly', 'اسبوعي'), option('MONTHLY', 'Mensuelle', 'Monthly', 'شهري'), option('QUARTERLY', 'Trimestrielle', 'Quarterly', 'ربع سنوي'), option('YEARLY', 'Annuelle', 'Yearly', 'سنوي')] },
+        { path: 'taxRate', type: 'number', label: text('TVA %', 'VAT %', 'نسبة الضريبة %') },
+        { path: 'paymentTermsDays', type: 'number', label: text('Delai de paiement', 'Payment terms', 'مهلة السداد') },
+        { path: 'autoInvoiceEnabled', type: 'boolean', label: text('Facturation automatique', 'Automatic invoicing', 'فوترة تلقائية') },
+        { path: 'billingDescription', type: 'textarea', label: text('Description de facturation', 'Billing description', 'وصف الفوترة') },
+        { path: 'summary', type: 'textarea', label: text('Resume', 'Summary', 'الملخص') },
+        { path: 'terms', type: 'textarea', label: text('Conditions', 'Terms', 'الشروط') },
+      ],
+    },
     preview: async (input) => preview('Update contract', 'The contract will be updated after confirmation.', input),
     execute: ({ id, ...data }, context) => contractService.update(id, context.user, erpScope(context, 'contracts.update', AI_ASSISTANT_PERMISSIONS.useWriteTools), data),
   },
@@ -421,21 +852,21 @@ export const erpTools: AiTool[] = [
     name: 'sign_contract_for_company',
     description: 'Sign a contract with the configured company signature and stamp.',
     module: 'signature',
-    requiredPermission: 'contracts.sign',
+    requiredPermission: 'contracts.sign.company',
     riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
     schema: entityIdInput,
     preview: async (input) => preview('Sign contract', 'The company signature and stamp will be applied to the contract after confirmation.', input),
-    execute: (input, context) => contractService.signForCompany(input.id, context.user, erpScope(context, 'contracts.sign', AI_ASSISTANT_PERMISSIONS.useWriteTools)),
+    execute: (input, context) => contractService.signForCompany(input.id, context.user, erpScope(context, 'contracts.sign.company', AI_ASSISTANT_PERMISSIONS.useWriteTools)),
   },
   {
     name: 'revoke_contract_signature',
     description: 'Revoke a contract signature.',
     module: 'signature',
-    requiredPermission: 'contracts.sign',
+    requiredPermission: 'contracts.signature.revoke',
     riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
     schema: contractRevokeSignatureInput,
     preview: async (input) => preview('Revoke contract signature', 'The contract signature will be revoked after confirmation.', input),
-    execute: ({ id, ...data }, context) => contractService.revokeSignature(id, context.user, erpScope(context, 'contracts.sign', AI_ASSISTANT_PERMISSIONS.useWriteTools), data),
+    execute: ({ id, ...data }, context) => contractService.revokeSignature(id, context.user, erpScope(context, 'contracts.signature.revoke', AI_ASSISTANT_PERMISSIONS.useWriteTools), data),
   },
   {
     name: 'send_contract_email',
@@ -449,14 +880,18 @@ export const erpTools: AiTool[] = [
   },
   {
     name: 'generate_contract_pdf',
-    description: 'Generate a contract PDF.',
+    description: 'Prepare secure contract PDF download information for an authorized contract.',
     module: 'pdf',
     requiredPermission: 'contracts.pdf.download',
     riskLevel: AiToolRiskLevel.READ_ONLY,
     schema: entityIdInput.extend({ language: z.enum(['fr', 'en', 'ar']).optional() }).strict(),
     execute: async (input, context) => {
-      const pdf = await contractService.downloadPdf(input.id, context.user.id, erpScope(context, 'contracts.pdf.download'), input.language);
-      return binaryResult(pdf.fileName, pdf.buffer);
+      const contract = await contractService.getById(input.id, context.user.id, erpScope(context, 'contracts.pdf.download'));
+      return {
+        contractId: contract.id,
+        contractNumber: contract.contractNumber,
+        downloadEndpoint: `/api/contracts/${contract.id}/pdf`,
+      };
     },
   },
   {
@@ -469,21 +904,37 @@ export const erpTools: AiTool[] = [
     execute: (input, context) => invoiceService.getInvoices(context.user.id, erpScope(context, 'invoices.view'), input),
   },
   {
-    name: 'get_invoice_details',
-    description: 'Get invoice details.',
-    module: 'invoices',
-    requiredPermission: 'invoices.view',
-    riskLevel: AiToolRiskLevel.READ_ONLY,
-    schema: z.object({ invoiceId: uuid }).strict(),
-    execute: (input, context) => invoiceService.getInvoiceById(input.invoiceId, context.user.id, erpScope(context, 'invoices.view')),
-  },
-  {
     name: 'create_invoice',
-    description: 'Create an invoice.',
+    description: 'Create a manual, ad-hoc invoice with explicitly given line items and a customerId. Do NOT use this when the request references an existing contract by number or by name â€” use contract_invoice_workflow instead so billing is generated from that contract\'s approved timesheets/schedule.',
     module: 'invoices',
     requiredPermission: 'invoices.create',
     riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
     schema: invoiceCreateInput,
+    form: {
+      title: text('CrÃ©er une facture', 'Create invoice', 'Ø¥Ù†Ø´Ø§Ø¡ ÙØ§ØªÙˆØ±Ø©'),
+      description: text('ComplÃ©tez les champs manquants pour prÃ©parer une facture manuelle.', 'Complete the missing fields to prepare a manual invoice.', 'Ø£ÙƒÙ…Ù„ Ø§Ù„Ø­Ù‚ÙˆÙ„ Ø§Ù„Ù†Ø§Ù‚ØµØ© Ù„ØªØ­Ø¶ÙŠØ± ÙØ§ØªÙˆØ±Ø© ÙŠØ¯ÙˆÙŠØ©.'),
+      buildInitialValue: async () => {
+        const settings = await settingsService.getCompanySettings();
+        return {
+          issueDate: new Date().toISOString().slice(0, 10),
+          currency: settings.defaultCurrency,
+          taxRate: Number(settings.defaultTaxRate ?? 20),
+          discount: 0,
+          items: [],
+        };
+      },
+      fields: [
+        { path: 'customerId', type: 'entity', entityType: 'customer', label: text('Client', 'Customer', 'Ø§Ù„Ø¹Ù…ÙŠÙ„'), required: true, resolveDisplayValue: resolveCustomerDisplayValue },
+        { path: 'issueDate', type: 'date', label: text('Date dâ€™Ã©mission', 'Issue date', 'ØªØ§Ø±ÙŠØ® Ø§Ù„Ø¥ØµØ¯Ø§Ø±'), required: true },
+        { path: 'dueDate', type: 'date', label: text('Date dâ€™Ã©chÃ©ance', 'Due date', 'ØªØ§Ø±ÙŠØ® Ø§Ù„Ø§Ø³ØªØ­Ù‚Ø§Ù‚'), required: true },
+        { path: 'currency', type: 'select', label: text('Devise', 'Currency', 'Ø§Ù„Ø¹Ù…Ù„Ø©'), required: true, options: currencyOptions() },
+        { path: 'taxRate', type: 'number', label: text('TVA %', 'VAT %', 'Ù†Ø³Ø¨Ø© Ø§Ù„Ø¶Ø±ÙŠØ¨Ø© %') },
+        { path: 'discount', type: 'currency', label: text('Remise globale', 'Global discount', 'Ø§Ù„Ø®ØµÙ… Ø§Ù„Ø¥Ø¬Ù…Ø§Ù„ÙŠ') },
+        { path: 'notes', type: 'textarea', label: text('Notes', 'Notes', 'Ù…Ù„Ø§Ø­Ø¸Ø§Øª') },
+        { path: 'terms', type: 'textarea', label: text('Conditions', 'Terms', 'Ø§Ù„Ø´Ø±ÙˆØ·') },
+        { path: 'items', type: 'array', label: text('Lignes de facture', 'Invoice lines', 'Ø¨Ù†ÙˆØ¯ Ø§Ù„ÙØ§ØªÙˆØ±Ø©'), required: true, minItems: 1, itemFields: [...invoiceLineItemFields] },
+      ],
+    },
     preview: async (input) => preview('Create invoice', 'A draft or selected-status invoice will be created after confirmation.', input),
     execute: (input, context) => invoiceService.createInvoice(context.user, erpScope(context, 'invoices.create', AI_ASSISTANT_PERMISSIONS.useWriteTools), input),
   },
@@ -494,6 +945,44 @@ export const erpTools: AiTool[] = [
     requiredPermission: 'invoices.update',
     riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
     schema: invoiceUpdateInput,
+    form: {
+      title: text('Modifier une facture', 'Update invoice', 'ØªØ¹Ø¯ÙŠÙ„ ÙØ§ØªÙˆØ±Ø©'),
+      description: text('Ajustez les champs modifiables de la facture avant la previsualisation.', 'Adjust the editable invoice fields before preview.', 'Ø¹Ø¯Ù‘Ù„ Ø­Ù‚ÙˆÙ„ Ø§Ù„ÙØ§ØªÙˆØ±Ø© Ø§Ù„Ù‚Ø§Ø¨Ù„Ø© Ù„Ù„ØªØºÙŠÙŠØ± Ù‚Ø¨Ù„ Ø§Ù„Ù…Ø¹Ø§ÙŠÙ†Ø©.'),
+      buildInitialValue: async (partialInput, context) => {
+        if (typeof partialInput.id !== 'string') return {};
+        const invoice = await invoiceService.getInvoiceById(partialInput.id, context.user.id, erpScope(context, 'invoices.view'));
+        return {
+          id: invoice.id,
+          customerId: invoice.customerId,
+          issueDate: new Date(invoice.issueDate).toISOString().slice(0, 10),
+          dueDate: new Date(invoice.dueDate).toISOString().slice(0, 10),
+          currency: invoice.currency,
+          taxRate: Number(invoice.taxRate ?? 0),
+          discount: Number(invoice.discount ?? 0),
+          notes: invoice.notes ?? '',
+          terms: invoice.terms ?? '',
+          items: (invoice.items ?? []).map((item) => ({
+            description: item.description,
+            quantity: Number(item.quantity),
+            unitPrice: Number(item.unitPrice),
+            taxRate: Number(item.taxRate ?? invoice.taxRate ?? 0),
+            unit: item.unit ?? '',
+          })),
+        };
+      },
+      fields: [
+        { path: 'id', type: 'text', label: text('Facture', 'Invoice', 'Ø§Ù„ÙØ§ØªÙˆØ±Ø©'), required: true, hidden: true },
+        { path: 'customerId', type: 'entity', entityType: 'customer', label: text('Client', 'Customer', 'Ø§Ù„Ø¹Ù…ÙŠÙ„'), required: true, resolveDisplayValue: resolveCustomerDisplayValue },
+        { path: 'issueDate', type: 'date', label: text('Date emission', 'Issue date', 'ØªØ§Ø±ÙŠØ® Ø§Ù„Ø§ØµØ¯Ø§Ø±'), required: true },
+        { path: 'dueDate', type: 'date', label: text('Date echeance', 'Due date', 'ØªØ§Ø±ÙŠØ® Ø§Ù„Ø§Ø³ØªØ­Ù‚Ø§Ù‚'), required: true },
+        { path: 'currency', type: 'select', label: text('Devise', 'Currency', 'Ø§Ù„Ø¹Ù…Ù„Ø©'), required: true, options: currencyOptions() },
+        { path: 'taxRate', type: 'number', label: text('TVA %', 'VAT %', 'Ù†Ø³Ø¨Ø© Ø§Ù„Ø¶Ø±ÙŠØ¨Ø© %') },
+        { path: 'discount', type: 'currency', label: text('Remise globale', 'Global discount', 'Ø§Ù„Ø®ØµÙ… Ø§Ù„Ø§Ø¬Ù…Ø§Ù„ÙŠ') },
+        { path: 'notes', type: 'textarea', label: text('Notes', 'Notes', 'Ù…Ù„Ø§Ø­Ø¸Ø§Øª') },
+        { path: 'terms', type: 'textarea', label: text('Conditions', 'Terms', 'Ø§Ù„Ø´Ø±ÙˆØ·') },
+        { path: 'items', type: 'array', label: text('Lignes de facture', 'Invoice lines', 'Ø¨Ù†ÙˆØ¯ Ø§Ù„ÙØ§ØªÙˆØ±Ø©'), required: true, minItems: 1, itemFields: [...invoiceLineItemFields] },
+      ],
+    },
     preview: async (input) => preview('Update invoice', 'The invoice will be updated after confirmation.', input),
     execute: ({ id, ...data }, context) => invoiceService.updateInvoice(id, context.user, erpScope(context, 'invoices.update', AI_ASSISTANT_PERMISSIONS.useWriteTools), data),
   },
@@ -528,40 +1017,28 @@ export const erpTools: AiTool[] = [
     execute: (input, context) => invoiceService.cancelInvoiceSignature(input.id, context.user.id, erpScope(context, 'invoices.sign', AI_ASSISTANT_PERMISSIONS.useWriteTools)),
   },
   {
-    name: 'send_invoice_email',
-    description: 'Send an invoice by email.',
-    module: 'email',
-    requiredPermission: 'invoices.send',
-    riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
-    schema: invoiceEmailInput,
-    preview: async (input) => preview('Send invoice email', 'The invoice PDF will be generated and emailed by the backend.', input),
-    execute: ({ invoiceId, ...data }, context) => invoiceService.sendInvoiceEmail(invoiceId, context.user.id, erpScope(context, 'invoices.send', AI_ASSISTANT_PERMISSIONS.useWriteTools), data),
-  },
-  {
-    name: 'generate_invoice_pdf',
-    description: 'Prepare invoice PDF metadata and validate PDF access.',
-    module: 'pdf',
-    requiredPermission: 'invoices.view',
-    riskLevel: AiToolRiskLevel.READ_ONLY,
-    schema: z.object({ invoiceId: uuid }).strict(),
-    execute: async (input, context) => {
-      const invoice = await invoiceService.getInvoiceById(input.invoiceId, context.user.id, erpScope(context, 'invoices.view'));
-      return {
-        generated: true,
-        fileName: `${invoice.invoiceNumber}.pdf`,
-        invoiceId: invoice.id,
-        invoiceNumber: invoice.invoiceNumber,
-        downloadEndpoint: `/api/invoices/${invoice.id}/pdf`,
-      };
-    },
-  },
-  {
     name: 'record_invoice_payment',
     description: 'Record a payment for an invoice.',
     module: 'payments',
     requiredPermission: 'payments.create',
     riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
     schema: invoicePaymentInput,
+    form: {
+      title: text('Enregistrer un paiement', 'Record invoice payment', 'ØªØ³Ø¬ÙŠÙ„ Ø¯ÙØ¹Ø©'),
+      description: text('Confirmez les informations de paiement avant la previsualisation.', 'Confirm the payment details before preview.', 'Ø£ÙƒØ¯ Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø¯ÙØ¹ Ù‚Ø¨Ù„ Ø§Ù„Ù…Ø¹Ø§ÙŠÙ†Ø©.'),
+      buildInitialValue: async () => ({
+        paymentDate: new Date().toISOString().slice(0, 10),
+        method: 'BANK_TRANSFER',
+      }),
+      fields: [
+        { path: 'invoiceId', type: 'entity', entityType: 'invoice', label: text('Facture', 'Invoice', 'Ø§Ù„ÙØ§ØªÙˆØ±Ø©'), required: true, readOnly: true, resolveDisplayValue: resolveInvoiceDisplayValue },
+        { path: 'amount', type: 'currency', label: text('Montant', 'Amount', 'Ø§Ù„Ù…Ø¨Ù„Øº'), required: true },
+        { path: 'paymentDate', type: 'date', label: text('Date de paiement', 'Payment date', 'ØªØ§Ø±ÙŠØ® Ø§Ù„Ø¯ÙØ¹'), required: true },
+        { path: 'method', type: 'select', label: text('Mode de paiement', 'Payment method', 'Ø·Ø±ÙŠÙ‚Ø© Ø§Ù„Ø¯ÙØ¹'), required: true, options: [...paymentMethodOptions] },
+        { path: 'reference', type: 'text', label: text('Reference', 'Reference', 'Ø§Ù„Ù…Ø±Ø¬Ø¹') },
+        { path: 'notes', type: 'textarea', label: text('Notes', 'Notes', 'Ù…Ù„Ø§Ø­Ø¸Ø§Øª') },
+      ],
+    },
     preview: async (input) => preview('Record payment', 'A payment will be recorded against the invoice after confirmation.', input),
     execute: ({ invoiceId, ...data }, context) => invoiceService.addPayment(invoiceId, context.user.id, erpScope(context, 'payments.create', AI_ASSISTANT_PERMISSIONS.useWriteTools), data),
   },
@@ -599,6 +1076,31 @@ export const erpTools: AiTool[] = [
     requiredPermission: 'devis.create',
     riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
     schema: quoteCreateInput,
+    form: {
+      title: text('CrÃ©er un devis', 'Create quote', 'Ø¥Ù†Ø´Ø§Ø¡ Ø¹Ø±Ø¶ Ø³Ø¹Ø±'),
+      description: text('ComplÃ©tez les informations du devis avant de gÃ©nÃ©rer la prÃ©visualisation.', 'Complete the quote information before generating the preview.', 'Ø£ÙƒÙ…Ù„ Ø¨ÙŠØ§Ù†Ø§Øª Ø¹Ø±Ø¶ Ø§Ù„Ø³Ø¹Ø± Ù‚Ø¨Ù„ Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ù…Ø¹Ø§ÙŠÙ†Ø©.'),
+      buildInitialValue: async () => {
+        const settings = await settingsService.getCompanySettings();
+        return {
+          issueDate: new Date().toISOString().slice(0, 10),
+          currency: settings.defaultCurrency,
+          taxRate: Number(settings.defaultTaxRate ?? 20),
+          discount: 0,
+          items: [],
+        };
+      },
+      fields: [
+        { path: 'customerId', type: 'entity', entityType: 'customer', label: text('Client', 'Customer', 'Ø§Ù„Ø¹Ù…ÙŠÙ„'), required: true, resolveDisplayValue: resolveCustomerDisplayValue },
+        { path: 'issueDate', type: 'date', label: text('Date dâ€™Ã©mission', 'Issue date', 'ØªØ§Ø±ÙŠØ® Ø§Ù„Ø¥ØµØ¯Ø§Ø±'), required: true },
+        { path: 'validUntil', type: 'date', label: text('Valable jusquâ€™au', 'Valid until', 'ØµØ§Ù„Ø­ Ø¥Ù„Ù‰ ØºØ§ÙŠØ©'), required: true },
+        { path: 'currency', type: 'select', label: text('Devise', 'Currency', 'Ø§Ù„Ø¹Ù…Ù„Ø©'), required: true, options: currencyOptions() },
+        { path: 'taxRate', type: 'number', label: text('TVA %', 'VAT %', 'Ù†Ø³Ø¨Ø© Ø§Ù„Ø¶Ø±ÙŠØ¨Ø© %') },
+        { path: 'discount', type: 'currency', label: text('Remise globale', 'Global discount', 'Ø§Ù„Ø®ØµÙ… Ø§Ù„Ø¥Ø¬Ù…Ø§Ù„ÙŠ') },
+        { path: 'notes', type: 'textarea', label: text('Notes', 'Notes', 'Ù…Ù„Ø§Ø­Ø¸Ø§Øª') },
+        { path: 'terms', type: 'textarea', label: text('Conditions', 'Terms', 'Ø§Ù„Ø´Ø±ÙˆØ·') },
+        { path: 'items', type: 'array', label: text('Lignes du devis', 'Quote lines', 'Ø¨Ù†ÙˆØ¯ Ø¹Ø±Ø¶ Ø§Ù„Ø³Ø¹Ø±'), required: true, minItems: 1, itemFields: [...quoteLineItemFields] },
+      ],
+    },
     preview: async (input) => preview('Create quote', 'A quote will be created after confirmation.', input),
     execute: (input, context) => devisService.createDevis(context.user, erpScope(context, 'devis.create', AI_ASSISTANT_PERMISSIONS.useWriteTools), input),
   },
@@ -609,6 +1111,45 @@ export const erpTools: AiTool[] = [
     requiredPermission: 'devis.update',
     riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
     schema: quoteUpdateInput,
+    form: {
+      title: text('Modifier un devis', 'Update quote', 'ØªØ¹Ø¯ÙŠÙ„ Ø¹Ø±Ø¶ Ø³Ø¹Ø±'),
+      description: text('Ajustez les champs du devis avant la previsualisation.', 'Adjust the quote fields before preview.', 'Ø¹Ø¯Ù‘Ù„ Ø­Ù‚ÙˆÙ„ Ø¹Ø±Ø¶ Ø§Ù„Ø³Ø¹Ø± Ù‚Ø¨Ù„ Ø§Ù„Ù…Ø¹Ø§ÙŠÙ†Ø©.'),
+      buildInitialValue: async (partialInput, context) => {
+        if (typeof partialInput.id !== 'string') return {};
+        const quote = await devisService.getDevisById(partialInput.id, context.user.id, erpScope(context, 'devis.view'));
+        return {
+          id: quote.id,
+          customerId: quote.customerId,
+          issueDate: new Date(quote.issueDate).toISOString().slice(0, 10),
+          validUntil: new Date(quote.validUntil).toISOString().slice(0, 10),
+          currency: quote.currency,
+          taxRate: Number(quote.taxRate ?? 0),
+          discount: Number(quote.discount ?? 0),
+          notes: quote.notes ?? '',
+          terms: quote.terms ?? '',
+          items: (quote.items ?? []).map((item) => ({
+            description: item.description,
+            quantity: Number(item.quantity),
+            unitPrice: Number(item.unitPrice),
+            taxRate: Number(item.taxRate ?? quote.taxRate ?? 0),
+            unit: item.unit ?? '',
+            discount: Number(item.discount ?? 0),
+          })),
+        };
+      },
+      fields: [
+        { path: 'id', type: 'text', label: text('Devis', 'Quote', 'Ø¹Ø±Ø¶ Ø§Ù„Ø³Ø¹Ø±'), required: true, hidden: true },
+        { path: 'customerId', type: 'entity', entityType: 'customer', label: text('Client', 'Customer', 'Ø§Ù„Ø¹Ù…ÙŠÙ„'), required: true, resolveDisplayValue: resolveCustomerDisplayValue },
+        { path: 'issueDate', type: 'date', label: text('Date emission', 'Issue date', 'ØªØ§Ø±ÙŠØ® Ø§Ù„Ø§ØµØ¯Ø§Ø±'), required: true },
+        { path: 'validUntil', type: 'date', label: text('Valable jusqu au', 'Valid until', 'ØµØ§Ù„Ø­ Ø§Ù„Ù‰ ØºØ§ÙŠØ©'), required: true },
+        { path: 'currency', type: 'select', label: text('Devise', 'Currency', 'Ø§Ù„Ø¹Ù…Ù„Ø©'), required: true, options: currencyOptions() },
+        { path: 'taxRate', type: 'number', label: text('TVA %', 'VAT %', 'Ù†Ø³Ø¨Ø© Ø§Ù„Ø¶Ø±ÙŠØ¨Ø© %') },
+        { path: 'discount', type: 'currency', label: text('Remise globale', 'Global discount', 'Ø§Ù„Ø®ØµÙ… Ø§Ù„Ø§Ø¬Ù…Ø§Ù„ÙŠ') },
+        { path: 'notes', type: 'textarea', label: text('Notes', 'Notes', 'Ù…Ù„Ø§Ø­Ø¸Ø§Øª') },
+        { path: 'terms', type: 'textarea', label: text('Conditions', 'Terms', 'Ø§Ù„Ø´Ø±ÙˆØ·') },
+        { path: 'items', type: 'array', label: text('Lignes du devis', 'Quote lines', 'Ø¨Ù†ÙˆØ¯ Ø¹Ø±Ø¶ Ø§Ù„Ø³Ø¹Ø±'), required: true, minItems: 1, itemFields: [...quoteLineItemFields] },
+      ],
+    },
     preview: async (input) => preview('Update quote', 'The quote will be updated after confirmation.', input),
     execute: ({ id, ...data }, context) => devisService.updateDevis(id, context.user, erpScope(context, 'devis.update', AI_ASSISTANT_PERMISSIONS.useWriteTools), data),
   },
@@ -657,10 +1198,14 @@ export const erpTools: AiTool[] = [
     description: 'Convert an approved quote/devis to an invoice.',
     module: 'quotes',
     requiredPermission: 'devis.convert',
+    additionalPermissions: ['invoices.create'],
     riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
     schema: entityIdInput,
     preview: async (input) => preview('Convert quote to invoice', 'An invoice will be created from the quote after confirmation.', input),
-    execute: (input, context) => devisService.convertToInvoice(input.id, context.user.id, erpScope(context, 'devis.convert', AI_ASSISTANT_PERMISSIONS.useWriteTools)),
+    execute: (input, context) => {
+      erpScope(context, 'invoices.create', AI_ASSISTANT_PERMISSIONS.useWriteTools);
+      return devisService.convertToInvoice(input.id, context.user.id, erpScope(context, 'devis.convert', AI_ASSISTANT_PERMISSIONS.useWriteTools));
+    },
   },
   {
     name: 'search_credit_notes',
@@ -699,6 +1244,25 @@ export const erpTools: AiTool[] = [
     requiredPermission: 'credit_notes.create',
     riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
     schema: creditNoteCreateInput,
+    form: {
+      title: text('Creer un avoir', 'Create credit note', 'Ø§Ù†Ø´Ø§Ø¡ Ø§Ø´Ø¹Ø§Ø± Ø¯Ø§Ø¦Ù†'),
+      description: text('Renseignez les informations de l avoir avant la previsualisation.', 'Complete the credit note before preview.', 'Ø§ÙƒÙ…Ù„ Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø§Ø´Ø¹Ø§Ø± Ø§Ù„Ø¯Ø§Ø¦Ù† Ù‚Ø¨Ù„ Ø§Ù„Ù…Ø¹Ø§ÙŠÙ†Ø©.'),
+      buildInitialValue: async () => ({
+        type: 'PARTIAL',
+        issueDate: new Date().toISOString().slice(0, 10),
+        lines: [],
+      }),
+      fields: [
+        { path: 'invoiceId', type: 'entity', entityType: 'invoice', label: text('Facture source', 'Source invoice', 'Ø§Ù„ÙØ§ØªÙˆØ±Ø© Ø§Ù„Ù…ØµØ¯Ø±'), required: true, resolveDisplayValue: resolveInvoiceDisplayValue },
+        { path: 'type', type: 'select', label: text('Type d avoir', 'Credit note type', 'Ù†ÙˆØ¹ Ø§Ù„Ø§Ø´Ø¹Ø§Ø± Ø§Ù„Ø¯Ø§Ø¦Ù†'), required: true, options: [option('FULL', 'Total', 'Full', 'ÙƒØ§Ù…Ù„'), option('PARTIAL', 'Partiel', 'Partial', 'Ø¬Ø²Ø¦ÙŠ')] },
+        { path: 'issueDate', type: 'date', label: text('Date emission', 'Issue date', 'ØªØ§Ø±ÙŠØ® Ø§Ù„Ø§ØµØ¯Ø§Ø±'), required: true },
+        { path: 'reasonId', type: 'entity', entityType: 'creditNoteReason', label: text('Motif', 'Reason', 'Ø§Ù„Ø³Ø¨Ø¨'), required: true, resolveDisplayValue: resolveCreditNoteReasonDisplayValue },
+        { path: 'reason', type: 'textarea', label: text('Explication detaillee', 'Detailed explanation', 'Ø´Ø±Ø­ Ù…ÙØµÙ„') },
+        { path: 'internalComment', type: 'textarea', label: text('Commentaire interne', 'Internal comment', 'Ù…Ù„Ø§Ø­Ø¸Ø© Ø¯Ø§Ø®Ù„ÙŠØ©') },
+        { path: 'amountTTC', type: 'currency', label: text('Montant TTC', 'Amount TTC', 'Ø§Ù„Ù…Ø¨Ù„Øº Ø´Ø§Ù…Ù„ Ø§Ù„Ø¶Ø±ÙŠØ¨Ø©') },
+        { path: 'lines', type: 'array', label: text('Lignes d avoir', 'Credit note lines', 'Ø¨Ù†ÙˆØ¯ Ø§Ù„Ø§Ø´Ø¹Ø§Ø± Ø§Ù„Ø¯Ø§Ø¦Ù†'), itemFields: [...invoiceLineItemFields] },
+      ],
+    },
     preview: async (input) => preview('Create credit note', 'A credit note will be created after confirmation.', input),
     execute: (input, context) => creditNoteService.create(context.user.id, erpScope(context, 'credit_notes.create', AI_ASSISTANT_PERMISSIONS.useWriteTools), input),
   },
@@ -709,6 +1273,40 @@ export const erpTools: AiTool[] = [
     requiredPermission: 'credit_notes.update',
     riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
     schema: creditNoteUpdateInput,
+    form: {
+      title: text('Modifier un avoir', 'Update credit note', 'تعديل اشعار دائن'),
+      description: text('Ajustez les champs de l avoir avant la previsualisation.', 'Adjust the credit note fields before preview.', 'عدّل حقول الاشعار الدائن قبل المعاينة.'),
+      buildInitialValue: async (partialInput, context) => {
+        if (typeof partialInput.id !== 'string') return {};
+        const creditNote = await creditNoteService.getById(partialInput.id, context.user.id, erpScope(context, 'credit_notes.view'));
+        return {
+          id: creditNote.id,
+          type: creditNote.type,
+          issueDate: new Date(creditNote.issueDate).toISOString().slice(0, 10),
+          reasonId: creditNote.reasonId,
+          reason: creditNote.reason ?? '',
+          internalComment: creditNote.internalComment ?? '',
+          amountTTC: Number(creditNote.total ?? 0),
+          lines: (creditNote.lines ?? []).map((line) => ({
+            description: line.description,
+            quantity: Number(line.quantity),
+            unitPrice: Number(line.unitPrice),
+            taxRate: Number(line.taxRate ?? 0),
+            unit: line.unit ?? '',
+          })),
+        };
+      },
+      fields: [
+        { path: 'id', type: 'text', label: text('Avoir', 'Credit note', 'الاشعار الدائن'), required: true, hidden: true },
+        { path: 'type', type: 'select', label: text('Type d avoir', 'Credit note type', 'نوع الاشعار الدائن'), options: [option('FULL', 'Total', 'Full', 'كامل'), option('PARTIAL', 'Partiel', 'Partial', 'جزئي')] },
+        { path: 'issueDate', type: 'date', label: text('Date emission', 'Issue date', 'تاريخ الاصدار') },
+        { path: 'reasonId', type: 'entity', entityType: 'creditNoteReason', label: text('Motif', 'Reason', 'السبب'), resolveDisplayValue: resolveCreditNoteReasonDisplayValue },
+        { path: 'reason', type: 'textarea', label: text('Explication detaillee', 'Detailed explanation', 'شرح مفصل') },
+        { path: 'internalComment', type: 'textarea', label: text('Commentaire interne', 'Internal comment', 'ملاحظة داخلية') },
+        { path: 'amountTTC', type: 'currency', label: text('Montant TTC', 'Amount TTC', 'المبلغ شامل الضريبة') },
+        { path: 'lines', type: 'array', label: text('Lignes d avoir', 'Credit note lines', 'بنود الاشعار الدائن'), itemFields: [...invoiceLineItemFields] },
+      ],
+    },
     preview: async (input) => preview('Update credit note', 'The credit note will be updated after confirmation.', input),
     execute: ({ id, ...data }, context) => creditNoteService.update(id, context.user.id, erpScope(context, 'credit_notes.update', AI_ASSISTANT_PERMISSIONS.useWriteTools), data),
   },
@@ -716,11 +1314,11 @@ export const erpTools: AiTool[] = [
     name: 'delete_credit_note',
     description: 'Delete a credit note/avoir when allowed.',
     module: 'credit_notes',
-    requiredPermission: 'credit_notes.delete',
+    requiredPermission: 'credit_notes.update',
     riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
     schema: entityIdInput,
     preview: async (input) => preview('Delete credit note', 'The credit note will be deleted after confirmation if business rules allow it.', input),
-    execute: (input, context) => creditNoteService.remove(input.id, context.user.id, erpScope(context, 'credit_notes.delete', AI_ASSISTANT_PERMISSIONS.useWriteTools)),
+    execute: (input, context) => creditNoteService.remove(input.id, context.user.id, erpScope(context, 'credit_notes.update', AI_ASSISTANT_PERMISSIONS.useWriteTools)),
   },
   {
     name: 'validate_credit_note',
@@ -754,14 +1352,18 @@ export const erpTools: AiTool[] = [
   },
   {
     name: 'generate_credit_note_pdf',
-    description: 'Generate a credit note PDF.',
+    description: 'Prepare secure credit note PDF download information for an authorized credit note.',
     module: 'pdf',
     requiredPermission: 'credit_notes.pdf.download',
     riskLevel: AiToolRiskLevel.READ_ONLY,
     schema: entityIdInput.extend({ language: z.enum(['fr', 'en', 'ar']).optional().default('fr') }).strict(),
     execute: async (input, context) => {
-      const pdf = await creditNoteService.pdfBuffer(input.id, context.user.id, erpScope(context, 'credit_notes.pdf.download'), input.language);
-      return binaryResult(pdf.fileName, pdf.buffer);
+      const creditNote = await creditNoteService.getById(input.id, context.user.id, erpScope(context, 'credit_notes.pdf.download'));
+      return {
+        creditNoteId: creditNote.id,
+        creditNoteNumber: creditNote.creditNoteNumber,
+        downloadEndpoint: `/api/credit-notes/${creditNote.id}/pdf`,
+      };
     },
   },
   {
@@ -802,6 +1404,33 @@ export const erpTools: AiTool[] = [
     requiredPermission: 'expense_notes.create',
     riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
     schema: expenseCreateInput,
+    form: {
+      title: text('Creer une note de frais', 'Create expense note', 'Ø§Ù†Ø´Ø§Ø¡ Ù…ØµØ±ÙˆÙ'),
+      description: text('Completez les informations de depense avant la previsualisation.', 'Complete the expense information before preview.', 'Ø§ÙƒÙ…Ù„ Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ù…ØµØ±ÙˆÙ Ù‚Ø¨Ù„ Ø§Ù„Ù…Ø¹Ø§ÙŠÙ†Ø©.'),
+      buildInitialValue: async () => ({
+        expenseDate: new Date().toISOString().slice(0, 10),
+        currency: 'MAD',
+        vatRate: 0,
+        vatAmount: 0,
+        source: 'MANUAL',
+        submit: false,
+      }),
+      fields: [
+        { path: 'categoryId', type: 'entity', entityType: 'expenseCategory', label: text('Categorie', 'Category', 'Ø§Ù„ÙØ¦Ø©'), required: true, resolveDisplayValue: resolveExpenseCategoryDisplayValue },
+        { path: 'expenseTypeId', type: 'entity', entityType: 'expenseType', label: text('Type de frais', 'Expense type', 'Ù†ÙˆØ¹ Ø§Ù„Ù…ØµØ±ÙˆÙ'), required: true, resolveDisplayValue: resolveExpenseTypeDisplayValue },
+        { path: 'expenseDate', type: 'date', label: text('Date de depense', 'Expense date', 'ØªØ§Ø±ÙŠØ® Ø§Ù„Ù…ØµØ±ÙˆÙ'), required: true },
+        { path: 'amountTTC', type: 'currency', label: text('Montant TTC', 'Amount TTC', 'Ø§Ù„Ù…Ø¨Ù„Øº Ø´Ø§Ù…Ù„ Ø§Ù„Ø¶Ø±ÙŠØ¨Ø©'), required: true },
+        { path: 'amountHT', type: 'currency', label: text('Montant HT', 'Amount HT', 'Ø§Ù„Ù…Ø¨Ù„Øº Ø¨Ø¯ÙˆÙ† Ø¶Ø±ÙŠØ¨Ø©') },
+        { path: 'vatAmount', type: 'currency', label: text('Montant TVA', 'VAT amount', 'Ù…Ø¨Ù„Øº Ø§Ù„Ø¶Ø±ÙŠØ¨Ø©') },
+        { path: 'vatRate', type: 'number', label: text('TVA %', 'VAT %', 'Ù†Ø³Ø¨Ø© Ø§Ù„Ø¶Ø±ÙŠØ¨Ø© %') },
+        { path: 'currency', type: 'select', label: text('Devise', 'Currency', 'Ø§Ù„Ø¹Ù…Ù„Ø©'), required: true, options: currencyOptions() },
+        { path: 'merchantName', type: 'text', label: text('Marchand', 'Merchant', 'Ø§Ù„ØªØ§Ø¬Ø±') },
+        { path: 'receiptNumber', type: 'text', label: text('Numero de recu', 'Receipt number', 'Ø±Ù‚Ù… Ø§Ù„Ø§ÙŠØµØ§Ù„') },
+        { path: 'comment', type: 'textarea', label: text('Commentaire', 'Comment', 'ØªØ¹Ù„ÙŠÙ‚') },
+        { path: 'source', type: 'select', label: text('Source', 'Source', 'Ø§Ù„Ù…ØµØ¯Ø±'), required: true, options: [...expenseSourceOptions] },
+        { path: 'submit', type: 'boolean', label: text('Soumettre immediatement', 'Submit immediately', 'Ø§Ø±Ø³Ø§Ù„ Ù…Ø¨Ø§Ø´Ø±Ø©') },
+      ],
+    },
     preview: async (input) => preview('Create expense note', 'An expense note will be created after confirmation.', input),
     execute: (input, context) => {
       erpScope(context, 'expense_notes.create', AI_ASSISTANT_PERMISSIONS.useWriteTools);
@@ -815,6 +1444,44 @@ export const erpTools: AiTool[] = [
     requiredPermission: 'expense_notes.update',
     riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
     schema: expenseUpdateInput,
+    form: {
+      title: text('Modifier une note de frais', 'Update expense note', 'تعديل مصروف'),
+      description: text('Ajustez les champs de depense avant la previsualisation.', 'Adjust the expense fields before preview.', 'عدّل حقول المصروف قبل المعاينة.'),
+      buildInitialValue: async (partialInput, context) => {
+        if (typeof partialInput.id !== 'string') return {};
+        const expense = await expenseService.getNote(context.user, partialInput.id);
+        return {
+          id: expense.id,
+          categoryId: expense.categoryId,
+          expenseTypeId: expense.expenseTypeId,
+          expenseDate: new Date(expense.expenseDate).toISOString().slice(0, 10),
+          amountTTC: Number(expense.amountTTC),
+          amountHT: Number(expense.amountHT ?? 0),
+          vatAmount: Number(expense.vatAmount ?? 0),
+          vatRate: Number(expense.vatRate ?? 0),
+          comment: expense.comment ?? '',
+          merchantName: expense.merchantName ?? '',
+          receiptNumber: expense.receiptNumber ?? '',
+          currency: expense.currency,
+          source: expense.source,
+        };
+      },
+      fields: [
+        { path: 'id', type: 'text', label: text('Depense', 'Expense', 'المصروف'), required: true, hidden: true },
+        { path: 'categoryId', type: 'entity', entityType: 'expenseCategory', label: text('Categorie', 'Category', 'الفئة'), resolveDisplayValue: resolveExpenseCategoryDisplayValue },
+        { path: 'expenseTypeId', type: 'entity', entityType: 'expenseType', label: text('Type de frais', 'Expense type', 'نوع المصروف'), resolveDisplayValue: resolveExpenseTypeDisplayValue },
+        { path: 'expenseDate', type: 'date', label: text('Date de depense', 'Expense date', 'تاريخ المصروف') },
+        { path: 'amountTTC', type: 'currency', label: text('Montant TTC', 'Amount TTC', 'المبلغ شامل الضريبة') },
+        { path: 'amountHT', type: 'currency', label: text('Montant HT', 'Amount HT', 'المبلغ بدون ضريبة') },
+        { path: 'vatAmount', type: 'currency', label: text('Montant TVA', 'VAT amount', 'مبلغ الضريبة') },
+        { path: 'vatRate', type: 'number', label: text('TVA %', 'VAT %', 'نسبة الضريبة %') },
+        { path: 'currency', type: 'select', label: text('Devise', 'Currency', 'العملة'), options: currencyOptions() },
+        { path: 'merchantName', type: 'text', label: text('Marchand', 'Merchant', 'التاجر') },
+        { path: 'receiptNumber', type: 'text', label: text('Numero de recu', 'Receipt number', 'رقم الايصال') },
+        { path: 'comment', type: 'textarea', label: text('Commentaire', 'Comment', 'تعليق') },
+        { path: 'source', type: 'select', label: text('Source', 'Source', 'المصدر'), options: [...expenseSourceOptions] },
+      ],
+    },
     preview: async (input) => preview('Update expense note', 'The expense note will be updated after confirmation.', input),
     execute: ({ id, ...data }, context) => {
       erpScope(context, 'expense_notes.update', AI_ASSISTANT_PERMISSIONS.useWriteTools);
@@ -910,14 +1577,19 @@ export const erpTools: AiTool[] = [
   },
   {
     name: 'generate_expense_pdf',
-    description: 'Generate an expense note PDF.',
+    description: 'Prepare secure expense note PDF download information for an authorized expense note.',
     module: 'pdf',
     requiredPermission: 'expense_notes.pdf.download',
     riskLevel: AiToolRiskLevel.READ_ONLY,
     schema: entityIdInput.extend({ language: z.enum(['en', 'fr', 'ar']).optional().default('fr') }).strict(),
     execute: async (input, context) => {
-      const pdf = await expenseService.renderNotePdf(context.user, input.id, 'expense_notes.pdf.download', 'PDF_DOWNLOADED', input.language);
-      return binaryResult(pdf.fileName, pdf.buffer);
+      erpScope(context, 'expense_notes.pdf.download');
+      const note = await expenseService.getNote(context.user, input.id);
+      return {
+        expenseId: note.id,
+        expenseNumber: note.documentNumber ?? note.receiptNumber ?? note.id,
+        downloadEndpoint: `/api/expense-notes/${note.id}/pdf`,
+      };
     },
   },
   {
@@ -945,6 +1617,162 @@ export const erpTools: AiTool[] = [
     },
   },
   {
+    name: 'create_expense_category',
+    description: 'Create an expense category.',
+    module: 'expenses',
+    requiredPermission: 'expense_categories.manage',
+    riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
+    schema: expenseCategoryInput,
+    form: {
+      title: text('Creer une categorie', 'Create category', 'Ø§Ù†Ø´Ø§Ø¡ ÙØ¦Ø©'),
+      description: text('Renseignez la categorie avant la previsualisation.', 'Provide the category before preview.', 'Ø§Ø¯Ø®Ù„ Ø§Ù„ÙØ¦Ø© Ù‚Ø¨Ù„ Ø§Ù„Ù…Ø¹Ø§ÙŠÙ†Ø©.'),
+      fields: [
+        { path: 'name', type: 'text', label: text('Nom', 'Name', 'Ø§Ù„Ø§Ø³Ù…'), required: true },
+        { path: 'active', type: 'boolean', label: text('Active', 'Active', 'Ù†Ø´Ø·Ø©') },
+      ],
+    },
+    preview: async (input) => preview('Create expense category', 'A new expense category will be created after confirmation.', input),
+    execute: (input, context) => {
+      erpScope(context, 'expense_categories.manage', AI_ASSISTANT_PERMISSIONS.useWriteTools);
+      return expenseService.createCategory(input);
+    },
+  },
+  {
+    name: 'update_expense_category',
+    description: 'Update an expense category.',
+    module: 'expenses',
+    requiredPermission: 'expense_categories.manage',
+    riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
+    schema: expenseCategoryUpdateInput,
+    form: {
+      title: text('Modifier une categorie', 'Update category', 'ØªØ¹Ø¯ÙŠÙ„ ÙØ¦Ø©'),
+      description: text('Mettez a jour la categorie de frais avant la previsualisation.', 'Update the expense category before preview.', 'Ø­Ø¯Ù‘Ø« ÙØ¦Ø© Ø§Ù„Ù…ØµØ±ÙˆÙ Ù‚Ø¨Ù„ Ø§Ù„Ù…Ø¹Ø§ÙŠÙ†Ø©.'),
+      fields: [
+        { path: 'id', type: 'entity', entityType: 'expenseCategory', label: text('Categorie', 'Category', 'Ø§Ù„ÙØ¦Ø©'), required: true, readOnly: true, resolveDisplayValue: resolveExpenseCategoryDisplayValue },
+        { path: 'name', type: 'text', label: text('Nom', 'Name', 'Ø§Ù„Ø§Ø³Ù…') },
+        { path: 'active', type: 'boolean', label: text('Active', 'Active', 'Ù†Ø´Ø·Ø©') },
+      ],
+    },
+    preview: async (input) => preview('Update expense category', 'The expense category will be updated after confirmation.', input),
+    execute: ({ id, ...data }, context) => {
+      erpScope(context, 'expense_categories.manage', AI_ASSISTANT_PERMISSIONS.useWriteTools);
+      return expenseService.updateCategory(id, data);
+    },
+  },
+  {
+    name: 'create_expense_type',
+    description: 'Create an expense type.',
+    module: 'expenses',
+    requiredPermission: 'expense_types.manage',
+    riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
+    schema: expenseTypeInput,
+    form: {
+      title: text('Creer un type de frais', 'Create expense type', 'Ø§Ù†Ø´Ø§Ø¡ Ù†ÙˆØ¹ Ù…ØµØ±ÙˆÙ'),
+      description: text('Renseignez le type de frais avant la previsualisation.', 'Provide the expense type before preview.', 'Ø§Ø¯Ø®Ù„ Ù†ÙˆØ¹ Ø§Ù„Ù…ØµØ±ÙˆÙ Ù‚Ø¨Ù„ Ø§Ù„Ù…Ø¹Ø§ÙŠÙ†Ø©.'),
+      fields: [
+        { path: 'categoryId', type: 'entity', entityType: 'expenseCategory', label: text('Categorie', 'Category', 'Ø§Ù„ÙØ¦Ø©'), required: true, resolveDisplayValue: resolveExpenseCategoryDisplayValue },
+        { path: 'name', type: 'text', label: text('Nom', 'Name', 'Ø§Ù„Ø§Ø³Ù…'), required: true },
+        { path: 'active', type: 'boolean', label: text('Actif', 'Active', 'Ù†Ø´Ø·') },
+      ],
+    },
+    preview: async (input) => preview('Create expense type', 'A new expense type will be created after confirmation.', input),
+    execute: (input, context) => {
+      erpScope(context, 'expense_types.manage', AI_ASSISTANT_PERMISSIONS.useWriteTools);
+      return expenseService.createType(input);
+    },
+  },
+  {
+    name: 'update_expense_type',
+    description: 'Update an expense type.',
+    module: 'expenses',
+    requiredPermission: 'expense_types.manage',
+    riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
+    schema: expenseTypeUpdateInput,
+    form: {
+      title: text('Modifier un type de frais', 'Update expense type', 'ØªØ¹Ø¯ÙŠÙ„ Ù†ÙˆØ¹ Ø§Ù„Ù…ØµØ±ÙˆÙ'),
+      description: text('Mettez a jour le type de frais avant la previsualisation.', 'Update the expense type before preview.', 'Ø­Ø¯Ù‘Ø« Ù†ÙˆØ¹ Ø§Ù„Ù…ØµØ±ÙˆÙ Ù‚Ø¨Ù„ Ø§Ù„Ù…Ø¹Ø§ÙŠÙ†Ø©.'),
+      fields: [
+        { path: 'id', type: 'entity', entityType: 'expenseType', label: text('Type', 'Type', 'Ø§Ù„Ù†ÙˆØ¹'), required: true, readOnly: true, resolveDisplayValue: resolveExpenseTypeDisplayValue },
+        { path: 'categoryId', type: 'entity', entityType: 'expenseCategory', label: text('Categorie', 'Category', 'Ø§Ù„ÙØ¦Ø©'), resolveDisplayValue: resolveExpenseCategoryDisplayValue },
+        { path: 'name', type: 'text', label: text('Nom', 'Name', 'Ø§Ù„Ø§Ø³Ù…') },
+        { path: 'active', type: 'boolean', label: text('Actif', 'Active', 'Ù†Ø´Ø·') },
+      ],
+    },
+    preview: async (input) => preview('Update expense type', 'The expense type will be updated after confirmation.', input),
+    execute: ({ id, ...data }, context) => {
+      erpScope(context, 'expense_types.manage', AI_ASSISTANT_PERMISSIONS.useWriteTools);
+      return expenseService.updateType(id, data);
+    },
+  },
+  {
+    name: 'get_expense_email_history',
+    description: 'Get expense note email history.',
+    module: 'email',
+    requiredPermission: 'expense_notes.email.history',
+    riskLevel: AiToolRiskLevel.READ_ONLY,
+    schema: entityIdInput,
+    execute: (input, context) => {
+      erpScope(context, 'expense_notes.email.history');
+      return expenseService.getEmailHistory(context.user, input.id);
+    },
+  },
+  {
+    name: 'resend_expense_email',
+    description: 'Resend a previously sent expense note email.',
+    module: 'email',
+    requiredPermission: 'expense_notes.email.resend',
+    riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
+    schema: expenseEmailLogInput,
+    preview: async (input) => preview('Resend expense email', 'The expense email will be resent after confirmation.', input),
+    execute: (input, context) => {
+      erpScope(context, 'expense_notes.email.resend', AI_ASSISTANT_PERMISSIONS.useWriteTools);
+      return expenseService.resendEmail(context.user, input.emailLogId);
+    },
+  },
+  {
+    name: 'export_expenses',
+    description: 'Export selected or filtered expense notes as PDF, ZIP, Excel or CSV.',
+    module: 'reports',
+    requiredPermission: 'expense_notes.export.excel',
+    anyPermissions: ['expense_notes.export.excel', 'expense_notes.report.export', 'expense_notes.pdf.bulk_export'],
+    riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
+    schema: expenseExportInput,
+    preview: async (input) => preview('Export expenses', 'The expense export will be generated by the backend after confirmation.', {
+      format: input.format,
+      selectedCount: input.ids?.length ?? 0,
+      hasFilters: Object.keys(input.filters ?? {}).length > 0,
+      includeReceipts: input.includeReceipts ?? false,
+    }),
+    execute: (input, context) => {
+      const permission = input.format === 'excel'
+        ? 'expense_notes.export.excel'
+        : input.format === 'csv'
+          ? 'expense_notes.report.export'
+          : 'expense_notes.pdf.bulk_export';
+      erpScope(context, permission, AI_ASSISTANT_PERMISSIONS.useWriteTools);
+      return expenseService.exportNotes(context.user, input).then((result) => ({
+        fileName: result.fileName,
+        contentType: result.contentType,
+        sizeBytes: result.buffer.length,
+        format: input.format,
+        includeReceipts: input.includeReceipts ?? false,
+      }));
+    },
+  },
+  {
+    name: 'delete_expense_attachment',
+    description: 'Delete an expense receipt attachment when business rules allow it.',
+    module: 'expenses',
+    requiredPermission: 'expense_notes.update',
+    riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
+    schema: expenseAttachmentInput,
+    preview: async (input) => preview('Delete expense attachment', 'The attachment will be deleted after confirmation if the expense note is still editable.', input),
+    execute: (input, context) => {
+      erpScope(context, 'expense_notes.update', AI_ASSISTANT_PERMISSIONS.useWriteTools);
+      return expenseService.deleteAttachment(context.user, input.attachmentId);
+    },
+  },
+  {
     name: 'search_products',
     description: 'Search and list products or catalogue items.',
     module: 'catalogue',
@@ -954,6 +1782,264 @@ export const erpTools: AiTool[] = [
     execute: (input, context) => {
       erpScope(context, 'products.view');
       return productService.getProducts(input);
+    },
+  },
+  {
+    name: 'create_product',
+    description: 'Create a product or catalogue item.',
+    module: 'catalogue',
+    requiredPermission: 'products.create',
+    riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
+    schema: productInput,
+    form: {
+      title: text('Creer un produit', 'Create product', 'Ø§Ù†Ø´Ø§Ø¡ Ù…Ù†ØªØ¬'),
+      description: text('Renseignez les informations produit avant la previsualisation.', 'Complete the product information before preview.', 'Ø§ÙƒÙ…Ù„ Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ù…Ù†ØªØ¬ Ù‚Ø¨Ù„ Ø§Ù„Ù…Ø¹Ø§ÙŠÙ†Ø©.'),
+      buildInitialValue: async () => ({
+        taxRate: 20,
+        isActive: true,
+      }),
+      fields: [
+        { path: 'name', type: 'text', label: text('Nom', 'Name', 'Ø§Ù„Ø§Ø³Ù…'), required: true },
+        { path: 'description', type: 'textarea', label: text('Description', 'Description', 'Ø§Ù„ÙˆØµÙ') },
+        { path: 'unit', type: 'text', label: text('Unite', 'Unit', 'Ø§Ù„ÙˆØ­Ø¯Ø©') },
+        { path: 'unitPrice', type: 'currency', label: text('Prix unitaire', 'Unit price', 'Ø³Ø¹Ø± Ø§Ù„ÙˆØ­Ø¯Ø©'), required: true },
+        { path: 'taxRate', type: 'number', label: text('TVA %', 'VAT %', 'Ù†Ø³Ø¨Ø© Ø§Ù„Ø¶Ø±ÙŠØ¨Ø© %'), required: true },
+        { path: 'isActive', type: 'boolean', label: text('Actif', 'Active', 'Ù†Ø´Ø·') },
+      ],
+    },
+    preview: async (input) => preview('Create product', 'A new product will be created after confirmation.', input),
+    execute: (input, context) => {
+      erpScope(context, 'products.create', AI_ASSISTANT_PERMISSIONS.useWriteTools);
+      return productService.createProduct(input);
+    },
+  },
+  {
+    name: 'update_product',
+    description: 'Update a product or catalogue item.',
+    module: 'catalogue',
+    requiredPermission: 'products.update',
+    riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
+    schema: productUpdateInput,
+    form: {
+      title: text('Modifier un produit', 'Update product', 'ØªØ¹Ø¯ÙŠÙ„ Ù…Ù†ØªØ¬'),
+      description: text('Ajustez les informations produit avant la previsualisation.', 'Adjust the product information before preview.', 'Ø¹Ø¯Ù‘Ù„ Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ù…Ù†ØªØ¬ Ù‚Ø¨Ù„ Ø§Ù„Ù…Ø¹Ø§ÙŠÙ†Ø©.'),
+      buildInitialValue: async (partialInput) => {
+        if (typeof partialInput.id !== 'string') return {};
+        const result = await productService.getProducts({ search: partialInput.id, limit: '50' });
+        const product = result.data.find((entry) => entry.id === partialInput.id);
+        return product
+          ? {
+              id: product.id,
+              name: product.name,
+              description: product.description ?? '',
+              unit: product.unit ?? '',
+              unitPrice: Number(product.unitPrice),
+              taxRate: Number(product.taxRate ?? 0),
+              isActive: product.isActive,
+            }
+          : {};
+      },
+      fields: [
+        { path: 'id', type: 'entity', entityType: 'product', label: text('Produit', 'Product', 'Ø§Ù„Ù…Ù†ØªØ¬'), required: true, readOnly: true },
+        { path: 'name', type: 'text', label: text('Nom', 'Name', 'Ø§Ù„Ø§Ø³Ù…') },
+        { path: 'description', type: 'textarea', label: text('Description', 'Description', 'Ø§Ù„ÙˆØµÙ') },
+        { path: 'unit', type: 'text', label: text('Unite', 'Unit', 'Ø§Ù„ÙˆØ­Ø¯Ø©') },
+        { path: 'unitPrice', type: 'currency', label: text('Prix unitaire', 'Unit price', 'Ø³Ø¹Ø± Ø§Ù„ÙˆØ­Ø¯Ø©') },
+        { path: 'taxRate', type: 'number', label: text('TVA %', 'VAT %', 'Ù†Ø³Ø¨Ø© Ø§Ù„Ø¶Ø±ÙŠØ¨Ø© %') },
+        { path: 'isActive', type: 'boolean', label: text('Actif', 'Active', 'Ù†Ø´Ø·') },
+      ],
+    },
+    preview: async (input) => preview('Update product', 'The product will be updated after confirmation.', input),
+    execute: ({ id, ...data }, context) => {
+      erpScope(context, 'products.update', AI_ASSISTANT_PERMISSIONS.useWriteTools);
+      return productService.updateProduct(id, data);
+    },
+  },
+  {
+    name: 'search_recurring_plans',
+    description: 'Search and list recurring billing plans.',
+    module: 'recurring',
+    requiredPermission: 'recurring.view',
+    riskLevel: AiToolRiskLevel.READ_ONLY,
+    schema: recurringQueryInput,
+    execute: (input, context) => recurringService.list(context.user.id, erpScope(context, 'recurring.view'), input),
+  },
+  {
+    name: 'get_recurring_plan_details',
+    description: 'Get recurring billing plan details.',
+    module: 'recurring',
+    requiredPermission: 'recurring.view',
+    riskLevel: AiToolRiskLevel.READ_ONLY,
+    schema: entityIdInput,
+    execute: (input, context) => recurringService.getById(input.id, context.user.id, erpScope(context, 'recurring.view')),
+  },
+  {
+    name: 'create_recurring_plan',
+    description: 'Create a recurring billing plan.',
+    module: 'recurring',
+    requiredPermission: 'recurring.create',
+    riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
+    schema: recurringCreateInput,
+    form: {
+      title: text('Creer un plan recurrent', 'Create recurring plan', 'Ø§Ù†Ø´Ø§Ø¡ Ø®Ø·Ø© Ù…ØªÙƒØ±Ø±Ø©'),
+      description: text('Definissez le plan recurrent avant la previsualisation.', 'Define the recurring plan before preview.', 'Ø­Ø¯Ø¯ Ø§Ù„Ø®Ø·Ø© Ø§Ù„Ù…ØªÙƒØ±Ø±Ø© Ù‚Ø¨Ù„ Ø§Ù„Ù…Ø¹Ø§ÙŠÙ†Ø©.'),
+      buildInitialValue: async () => ({
+        startDate: new Date().toISOString().slice(0, 10),
+        frequency: 'MONTHLY',
+        intervalCount: 1,
+        dueDays: 30,
+        autoSend: false,
+        currency: 'MAD',
+        discount: 0,
+        items: [],
+      }),
+      fields: [
+        { path: 'customerId', type: 'entity', entityType: 'customer', label: text('Client', 'Customer', 'Ø§Ù„Ø¹Ù…ÙŠÙ„'), required: true, resolveDisplayValue: resolveCustomerDisplayValue },
+        { path: 'name', type: 'text', label: text('Nom du plan', 'Plan name', 'Ø§Ø³Ù… Ø§Ù„Ø®Ø·Ø©'), required: true },
+        { path: 'frequency', type: 'select', label: text('Frequence', 'Frequency', 'Ø§Ù„ØªÙƒØ±Ø§Ø±'), required: true, options: [...recurringFrequencyOptions] },
+        { path: 'intervalCount', type: 'number', label: text('Intervalle', 'Interval count', 'Ø¹Ø¯Ø¯ Ø§Ù„ÙØªØ±Ø§Øª'), required: true },
+        { path: 'startDate', type: 'date', label: text('Date de debut', 'Start date', 'ØªØ§Ø±ÙŠØ® Ø§Ù„Ø¨Ø¯Ø¡'), required: true },
+        { path: 'endDate', type: 'date', label: text('Date de fin', 'End date', 'ØªØ§Ø±ÙŠØ® Ø§Ù„Ø§Ù†ØªÙ‡Ø§Ø¡') },
+        { path: 'dueDays', type: 'number', label: text('Delai de paiement', 'Due days', 'Ù…Ù‡Ù„Ø© Ø§Ù„Ø³Ø¯Ø§Ø¯'), required: true },
+        { path: 'autoSend', type: 'boolean', label: text('Envoi automatique', 'Auto send', 'Ø§Ø±Ø³Ø§Ù„ ØªÙ„Ù‚Ø§Ø¦ÙŠ') },
+        { path: 'currency', type: 'select', label: text('Devise', 'Currency', 'Ø§Ù„Ø¹Ù…Ù„Ø©'), required: true, options: currencyOptions() },
+        { path: 'discount', type: 'currency', label: text('Remise', 'Discount', 'Ø§Ù„Ø®ØµÙ…') },
+        { path: 'notes', type: 'textarea', label: text('Notes', 'Notes', 'Ù…Ù„Ø§Ø­Ø¸Ø§Øª') },
+        { path: 'terms', type: 'textarea', label: text('Conditions', 'Terms', 'Ø§Ù„Ø´Ø±ÙˆØ·') },
+        { path: 'items', type: 'array', label: text('Lignes', 'Items', 'Ø§Ù„Ø¨Ù†ÙˆØ¯'), required: true, minItems: 1, itemFields: [...invoiceLineItemFields] },
+      ],
+    },
+    preview: async (input) => preview('Create recurring plan', 'A recurring billing plan will be created after confirmation.', input),
+    execute: (input, context) => recurringService.create(context.user, erpScope(context, 'recurring.create', AI_ASSISTANT_PERMISSIONS.useWriteTools), input),
+  },
+  {
+    name: 'update_recurring_plan',
+    description: 'Update a recurring billing plan.',
+    module: 'recurring',
+    requiredPermission: 'recurring.update',
+    riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
+    schema: recurringUpdateInput,
+    form: {
+      title: text('Modifier un plan recurrent', 'Update recurring plan', 'ØªØ¹Ø¯ÙŠÙ„ Ø®Ø·Ø© Ù…ØªÙƒØ±Ø±Ø©'),
+      description: text('Ajustez le plan recurrent avant la previsualisation.', 'Adjust the recurring plan before preview.', 'Ø¹Ø¯Ù‘Ù„ Ø§Ù„Ø®Ø·Ø© Ø§Ù„Ù…ØªÙƒØ±Ø±Ø© Ù‚Ø¨Ù„ Ø§Ù„Ù…Ø¹Ø§ÙŠÙ†Ø©.'),
+      buildInitialValue: async (partialInput, context) => {
+        if (typeof partialInput.id !== 'string') return {};
+        const plan = await recurringService.getById(partialInput.id, context.user.id, erpScope(context, 'recurring.view'));
+        return {
+          id: plan.id,
+          customerId: plan.customerId,
+          name: plan.name,
+          frequency: plan.frequency,
+          intervalCount: Number(plan.intervalCount),
+          startDate: new Date(plan.startDate).toISOString().slice(0, 10),
+          endDate: plan.endDate ? new Date(plan.endDate).toISOString().slice(0, 10) : '',
+          dueDays: Number(plan.dueDays),
+          autoSend: plan.autoSend,
+          currency: plan.currency,
+          discount: Number(plan.discount ?? 0),
+          notes: plan.notes ?? '',
+          terms: plan.terms ?? '',
+          items: (plan.items ?? []).map((item) => ({
+            description: item.description,
+            quantity: Number(item.quantity),
+            unitPrice: Number(item.unitPrice),
+            taxRate: Number(item.taxRate ?? 0),
+            unit: item.unit ?? '',
+          })),
+        };
+      },
+      fields: [
+        { path: 'id', type: 'text', label: text('Plan', 'Plan', 'Ø§Ù„Ø®Ø·Ø©'), required: true, hidden: true },
+        { path: 'customerId', type: 'entity', entityType: 'customer', label: text('Client', 'Customer', 'Ø§Ù„Ø¹Ù…ÙŠÙ„'), resolveDisplayValue: resolveCustomerDisplayValue },
+        { path: 'name', type: 'text', label: text('Nom du plan', 'Plan name', 'Ø§Ø³Ù… Ø§Ù„Ø®Ø·Ø©') },
+        { path: 'frequency', type: 'select', label: text('Frequence', 'Frequency', 'Ø§Ù„ØªÙƒØ±Ø§Ø±'), options: [...recurringFrequencyOptions] },
+        { path: 'intervalCount', type: 'number', label: text('Intervalle', 'Interval count', 'Ø¹Ø¯Ø¯ Ø§Ù„ÙØªØ±Ø§Øª') },
+        { path: 'startDate', type: 'date', label: text('Date de debut', 'Start date', 'ØªØ§Ø±ÙŠØ® Ø§Ù„Ø¨Ø¯Ø¡') },
+        { path: 'endDate', type: 'date', label: text('Date de fin', 'End date', 'ØªØ§Ø±ÙŠØ® Ø§Ù„Ø§Ù†ØªÙ‡Ø§Ø¡') },
+        { path: 'dueDays', type: 'number', label: text('Delai de paiement', 'Due days', 'Ù…Ù‡Ù„Ø© Ø§Ù„Ø³Ø¯Ø§Ø¯') },
+        { path: 'autoSend', type: 'boolean', label: text('Envoi automatique', 'Auto send', 'Ø§Ø±Ø³Ø§Ù„ ØªÙ„Ù‚Ø§Ø¦ÙŠ') },
+        { path: 'currency', type: 'select', label: text('Devise', 'Currency', 'Ø§Ù„Ø¹Ù…Ù„Ø©'), options: currencyOptions() },
+        { path: 'discount', type: 'currency', label: text('Remise', 'Discount', 'Ø§Ù„Ø®ØµÙ…') },
+        { path: 'notes', type: 'textarea', label: text('Notes', 'Notes', 'Ù…Ù„Ø§Ø­Ø¸Ø§Øª') },
+        { path: 'terms', type: 'textarea', label: text('Conditions', 'Terms', 'Ø§Ù„Ø´Ø±ÙˆØ·') },
+        { path: 'items', type: 'array', label: text('Lignes', 'Items', 'Ø§Ù„Ø¨Ù†ÙˆØ¯'), itemFields: [...invoiceLineItemFields] },
+      ],
+    },
+    preview: async (input) => preview('Update recurring plan', 'The recurring billing plan will be updated after confirmation.', input),
+    execute: ({ id, ...data }, context) => recurringService.update(id, context.user, erpScope(context, 'recurring.update', AI_ASSISTANT_PERMISSIONS.useWriteTools), data),
+  },
+  {
+    name: 'change_recurring_plan_status',
+    description: 'Change recurring billing plan status.',
+    module: 'recurring',
+    requiredPermission: 'recurring.update',
+    riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
+    schema: recurringStatusInput,
+    preview: async (input) => preview('Change recurring plan status', 'The recurring plan status will be changed after confirmation.', input),
+    execute: (input, context) => recurringService.changeStatus(input.id, context.user.id, erpScope(context, 'recurring.update', AI_ASSISTANT_PERMISSIONS.useWriteTools), input.status),
+  },
+  {
+    name: 'run_recurring_plan_now',
+    description: 'Run a recurring billing plan immediately when business rules allow it.',
+    module: 'recurring',
+    requiredPermission: 'recurring.run',
+    riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
+    schema: entityIdInput,
+    preview: async (input) => preview('Run recurring plan now', 'The recurring plan will generate its due invoice immediately after confirmation.', input),
+    execute: (input, context) => recurringService.runNow(input.id, context.user, erpScope(context, 'recurring.run', AI_ASSISTANT_PERMISSIONS.useWriteTools)),
+  },
+  {
+    name: 'list_reminders',
+    description: 'Search and list invoice reminders.',
+    module: 'reminders',
+    requiredPermission: 'reminders.view',
+    riskLevel: AiToolRiskLevel.READ_ONLY,
+    schema: reminderQueryInput,
+    execute: (input, context) => {
+      erpScope(context, 'reminders.view');
+      return reminderService.getReminders(input);
+    },
+  },
+  {
+    name: 'create_reminder',
+    description: 'Create a payment reminder using the existing reminder workflow.',
+    module: 'reminders',
+    requiredPermission: 'reminders.create',
+    riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
+    schema: reminderCreateInput,
+    form: {
+      title: text('Creer un rappel', 'Create reminder', 'Ø§Ù†Ø´Ø§Ø¡ ØªØ°ÙƒÙŠØ±'),
+      description: text('Preparez le rappel avant la previsualisation.', 'Prepare the reminder before preview.', 'Ø­Ø¶Ù‘Ø± Ø§Ù„ØªØ°ÙƒÙŠØ± Ù‚Ø¨Ù„ Ø§Ù„Ù…Ø¹Ø§ÙŠÙ†Ø©.'),
+      buildInitialValue: async () => ({
+        type: 'MANUAL',
+        sendEmail: true,
+      }),
+      fields: [
+        { path: 'invoiceId', type: 'entity', entityType: 'invoice', label: text('Facture', 'Invoice', 'Ø§Ù„ÙØ§ØªÙˆØ±Ø©'), required: true, readOnly: true, resolveDisplayValue: resolveInvoiceDisplayValue },
+        { path: 'type', type: 'select', label: text('Type', 'Type', 'Ø§Ù„Ù†ÙˆØ¹'), required: true, options: [...reminderTypeOptions] },
+        { path: 'recipientEmail', type: 'text', label: text('Destinataire', 'Recipient email', 'Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ù…Ø³ØªÙ„Ù…') },
+        { path: 'subject', type: 'text', label: text('Sujet', 'Subject', 'Ø§Ù„Ù…ÙˆØ¶ÙˆØ¹') },
+        { path: 'body', type: 'textarea', label: text('Message', 'Message', 'Ø§Ù„Ø±Ø³Ø§Ù„Ø©') },
+        { path: 'sendEmail', type: 'boolean', label: text('Envoyer l email', 'Send email', 'Ø§Ø±Ø³Ù„ Ø§Ù„Ø¨Ø±ÙŠØ¯') },
+      ],
+    },
+    preview: async (input) => preview('Create reminder', 'The reminder will be created and optionally sent after confirmation.', input),
+    execute: (input, context) => {
+      erpScope(context, 'reminders.create', AI_ASSISTANT_PERMISSIONS.useWriteTools);
+      return reminderService.createReminder(context.user.id, input);
+    },
+  },
+  {
+    name: 'run_due_reminders',
+    description: 'Generate automatic reminder drafts for due invoices.',
+    module: 'reminders',
+    requiredPermission: 'reminders.manage',
+    riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
+    schema: z.object({}).strict(),
+    preview: async () => preview('Run due reminders', 'Automatic reminder drafts will be generated for due invoices after confirmation.', {}),
+    execute: (_input, context) => {
+      erpScope(context, 'reminders.manage', AI_ASSISTANT_PERMISSIONS.useWriteTools);
+      return reminderService.createAutomaticReminderDrafts();
     },
   },
   {
@@ -975,6 +2061,21 @@ export const erpTools: AiTool[] = [
     requiredPermission: 'users.create',
     riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
     schema: userCreateInput,
+    form: {
+      title: text('Creer un utilisateur', 'Create user', 'Ø§Ù†Ø´Ø§Ø¡ Ù…Ø³ØªØ®Ø¯Ù…'),
+      description: text('Completez les informations utilisateur avant la previsualisation.', 'Complete the user information before preview.', 'Ø§ÙƒÙ…Ù„ Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù… Ù‚Ø¨Ù„ Ø§Ù„Ù…Ø¹Ø§ÙŠÙ†Ø©.'),
+      buildInitialValue: async () => ({
+        role: 'EMPLOYEE',
+        isActive: true,
+      }),
+      fields: [
+        { path: 'name', type: 'text', label: text('Nom', 'Name', 'Ø§Ù„Ø§Ø³Ù…'), required: true },
+        { path: 'email', type: 'text', label: text('Email', 'Email', 'Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ø§Ù„ÙƒØªØ±ÙˆÙ†ÙŠ'), required: true },
+        { path: 'password', type: 'text', label: text('Mot de passe', 'Password', 'ÙƒÙ„Ù…Ø© Ø§Ù„Ù…Ø±ÙˆØ±'), required: true },
+        { path: 'role', type: 'select', label: text('Role', 'Role', 'Ø§Ù„Ø¯ÙˆØ±'), required: true, options: [...roleOptions] },
+        { path: 'isActive', type: 'boolean', label: text('Actif', 'Active', 'Ù†Ø´Ø·') },
+      ],
+    },
     preview: async (input) => preview('Create user', 'A new ERP user will be created after confirmation.', { ...input, password: '********' }),
     execute: (input, context) => {
       erpScope(context, 'users.create', AI_ASSISTANT_PERMISSIONS.useWriteTools);
@@ -988,6 +2089,32 @@ export const erpTools: AiTool[] = [
     requiredPermission: 'users.update',
     riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
     schema: userUpdateInput,
+    form: {
+      title: text('Modifier un utilisateur', 'Update user', 'ØªØ¹Ø¯ÙŠÙ„ Ù…Ø³ØªØ®Ø¯Ù…'),
+      description: text('Ajustez les champs utilisateur avant la previsualisation.', 'Adjust the user fields before preview.', 'Ø¹Ø¯Ù‘Ù„ Ø­Ù‚ÙˆÙ„ Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù… Ù‚Ø¨Ù„ Ø§Ù„Ù…Ø¹Ø§ÙŠÙ†Ø©.'),
+      buildInitialValue: async (partialInput) => {
+        if (typeof partialInput.id !== 'string') return {};
+        const users = await userService.getUsers({ page: '1', limit: '50' });
+        const user = users.data.find((entry) => entry.id === partialInput.id);
+        return user
+          ? {
+              id: user.id,
+              name: user.name,
+              email: user.email,
+              role: user.role,
+              isActive: user.isActive,
+            }
+          : {};
+      },
+      fields: [
+        { path: 'id', type: 'entity', entityType: 'user', label: text('Utilisateur', 'User', 'Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù…'), required: true, readOnly: true, resolveDisplayValue: resolveUserDisplayValue },
+        { path: 'name', type: 'text', label: text('Nom', 'Name', 'Ø§Ù„Ø§Ø³Ù…') },
+        { path: 'email', type: 'text', label: text('Email', 'Email', 'Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ø§Ù„ÙƒØªØ±ÙˆÙ†ÙŠ') },
+        { path: 'password', type: 'text', label: text('Nouveau mot de passe', 'New password', 'ÙƒÙ„Ù…Ø© Ù…Ø±ÙˆØ± Ø¬Ø¯ÙŠØ¯Ø©') },
+        { path: 'role', type: 'select', label: text('Role', 'Role', 'Ø§Ù„Ø¯ÙˆØ±'), options: [...roleOptions] },
+        { path: 'isActive', type: 'boolean', label: text('Actif', 'Active', 'Ù†Ø´Ø·') },
+      ],
+    },
     preview: async (input) => preview('Update user', 'The ERP user will be updated after confirmation.', { ...input, password: input.password ? '********' : undefined }),
     execute: ({ id, ...data }, context) => {
       erpScope(context, 'users.update', AI_ASSISTANT_PERMISSIONS.useWriteTools);
@@ -1013,6 +2140,14 @@ export const erpTools: AiTool[] = [
     requiredPermission: 'roles.create',
     riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
     schema: roleInput,
+    form: {
+      title: text('Creer un role', 'Create role', 'Ø§Ù†Ø´Ø§Ø¡ Ø¯ÙˆØ±'),
+      description: text('Definissez le role avant la previsualisation.', 'Define the role before preview.', 'Ø­Ø¯Ø¯ Ø§Ù„Ø¯ÙˆØ± Ù‚Ø¨Ù„ Ø§Ù„Ù…Ø¹Ø§ÙŠÙ†Ø©.'),
+      fields: [
+        { path: 'name', type: 'text', label: text('Nom du role', 'Role name', 'Ø§Ø³Ù… Ø§Ù„Ø¯ÙˆØ±'), required: true },
+        { path: 'description', type: 'textarea', label: text('Description', 'Description', 'Ø§Ù„ÙˆØµÙ') },
+      ],
+    },
     preview: async (input) => preview('Create role', 'A new role will be created after confirmation.', input),
     execute: (input, context) => {
       erpScope(context, 'roles.create', AI_ASSISTANT_PERMISSIONS.useWriteTools);
@@ -1026,6 +2161,21 @@ export const erpTools: AiTool[] = [
     requiredPermission: 'roles.update',
     riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
     schema: roleUpdateInput,
+    form: {
+      title: text('Modifier un role', 'Update role', 'ØªØ¹Ø¯ÙŠÙ„ Ø¯ÙˆØ±'),
+      description: text('Ajustez les informations du role avant la previsualisation.', 'Adjust the role information before preview.', 'Ø¹Ø¯Ù‘Ù„ Ù…Ø¹Ù„ÙˆÙ…Ø§Øª Ø§Ù„Ø¯ÙˆØ± Ù‚Ø¨Ù„ Ø§Ù„Ù…Ø¹Ø§ÙŠÙ†Ø©.'),
+      buildInitialValue: async (partialInput) => {
+        if (typeof partialInput.id !== 'string') return {};
+        const roles = await rbacService.listRoles();
+        const role = roles.find((entry) => entry.id === partialInput.id);
+        return role ? { id: role.id, name: role.name, description: role.description ?? '' } : {};
+      },
+      fields: [
+        { path: 'id', type: 'entity', entityType: 'role', label: text('Role', 'Role', 'Ø§Ù„Ø¯ÙˆØ±'), required: true, readOnly: true, resolveDisplayValue: resolveRoleDisplayValue },
+        { path: 'name', type: 'text', label: text('Nom du role', 'Role name', 'Ø§Ø³Ù… Ø§Ù„Ø¯ÙˆØ±') },
+        { path: 'description', type: 'textarea', label: text('Description', 'Description', 'Ø§Ù„ÙˆØµÙ') },
+      ],
+    },
     preview: async (input) => preview('Update role', 'The role will be updated after confirmation.', input),
     execute: ({ id, ...data }, context) => {
       erpScope(context, 'roles.update', AI_ASSISTANT_PERMISSIONS.useWriteTools);
@@ -1058,12 +2208,57 @@ export const erpTools: AiTool[] = [
     },
   },
   {
+    name: 'create_permission',
+    description: 'Create a permission entry when the RBAC system allows it.',
+    module: 'permissions',
+    requiredPermission: 'permissions.assign',
+    riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
+    schema: permissionCreateInput,
+    form: {
+      title: text('Creer une permission', 'Create permission', 'Ø§Ù†Ø´Ø§Ø¡ ØµÙ„Ø§Ø­ÙŠØ©'),
+      description: text('Renseignez la cle et la description avant la previsualisation.', 'Provide the permission key and description before preview.', 'Ø§Ø¯Ø®Ù„ Ù…ÙØªØ§Ø­ Ø§Ù„ØµÙ„Ø§Ø­ÙŠØ© ÙˆØ§Ù„ÙˆØµÙ Ù‚Ø¨Ù„ Ø§Ù„Ù…Ø¹Ø§ÙŠÙ†Ø©.'),
+      fields: [
+        { path: 'key', type: 'text', label: text('Cle permission', 'Permission key', 'Ù…ÙØªØ§Ø­ Ø§Ù„ØµÙ„Ø§Ø­ÙŠØ©'), required: true },
+        { path: 'description', type: 'textarea', label: text('Description', 'Description', 'Ø§Ù„ÙˆØµÙ') },
+      ],
+    },
+    preview: async (input) => preview('Create permission', 'The permission will be created after confirmation.', input),
+    execute: (input, context) => {
+      erpScope(context, 'permissions.assign', AI_ASSISTANT_PERMISSIONS.useWriteTools);
+      return rbacService.createPermission(input);
+    },
+  },
+  {
+    name: 'delete_permission',
+    description: 'Delete a permission entry when the RBAC system allows it.',
+    module: 'permissions',
+    requiredPermission: 'permissions.assign',
+    riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
+    schema: entityIdInput,
+    preview: async (input) => preview('Delete permission', 'The permission will be deleted after confirmation.', input),
+    execute: (input, context) => {
+      erpScope(context, 'permissions.assign', AI_ASSISTANT_PERMISSIONS.useWriteTools);
+      return rbacService.deletePermission(input.id);
+    },
+  },
+  {
     name: 'assign_role_permissions',
     description: 'Assign permissions and scopes to a role.',
     module: 'permissions',
     requiredPermission: 'permissions.assign',
     riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
     schema: assignPermissionsInput,
+    form: {
+      title: text('Affecter permissions role', 'Assign role permissions', 'ØªØ¹ÙŠÙŠÙ† ØµÙ„Ø§Ø­ÙŠØ§Øª Ø§Ù„Ø¯ÙˆØ±'),
+      description: text('Remplacez l ensemble des permissions du role via une previsualisation securisee.', 'Replace the role permission set through a secure preview.', 'Ø§Ø³ØªØ¨Ø¯Ù„ Ù…Ø¬Ù…ÙˆØ¹Ø© ØµÙ„Ø§Ø­ÙŠØ§Øª Ø§Ù„Ø¯ÙˆØ± Ø¹Ø¨Ø± Ù…Ø¹Ø§ÙŠÙ†Ø© Ø¢Ù…Ù†Ø©.'),
+      fields: [
+        { path: 'roleId', type: 'entity', entityType: 'role', label: text('Role', 'Role', 'Ø§Ù„Ø¯ÙˆØ±'), required: true, resolveDisplayValue: resolveRoleDisplayValue },
+        { path: 'permissions', type: 'array', label: text('Permissions', 'Permissions', 'Ø§Ù„ØµÙ„Ø§Ø­ÙŠØ§Øª'), required: true, minItems: 1, itemFields: [
+          { path: 'permissionId', type: 'entity', entityType: 'permission', label: text('Permission', 'Permission', 'Ø§Ù„ØµÙ„Ø§Ø­ÙŠØ©'), required: true, resolveDisplayValue: resolvePermissionDisplayValue },
+          { path: 'scope', type: 'select', label: text('Scope', 'Scope', 'Ø§Ù„Ù†Ø·Ø§Ù‚'), required: true, options: [...permissionScopeOptions] },
+        ] },
+      ],
+    },
     preview: async (input) => preview('Assign role permissions', 'The role permission set will be replaced after confirmation.', { roleId: input.roleId, permissionCount: input.permissions.length }),
     execute: (input, context) => {
       erpScope(context, 'permissions.assign', AI_ASSISTANT_PERMISSIONS.useWriteTools);
@@ -1077,6 +2272,15 @@ export const erpTools: AiTool[] = [
     requiredPermission: 'permissions.assign',
     riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
     schema: assignRoleInput,
+    form: {
+      title: text('Affecter un role utilisateur', 'Assign user role', 'ØªØ¹ÙŠÙŠÙ† Ø¯ÙˆØ± Ù„Ù…Ø³ØªØ®Ø¯Ù…'),
+      description: text('Choisissez l utilisateur et le role avant la previsualisation.', 'Choose the user and role before preview.', 'Ø§Ø®ØªØ± Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù… ÙˆØ§Ù„Ø¯ÙˆØ± Ù‚Ø¨Ù„ Ø§Ù„Ù…Ø¹Ø§ÙŠÙ†Ø©.'),
+      buildInitialValue: async (partialInput) => ({ userId: partialInput.userId, roleId: partialInput.roleId }),
+      fields: [
+        { path: 'userId', type: 'entity', entityType: 'user', label: text('Utilisateur', 'User', 'Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù…'), required: true, resolveDisplayValue: resolveUserDisplayValue },
+        { path: 'roleId', type: 'entity', entityType: 'role', label: text('Role', 'Role', 'Ø§Ù„Ø¯ÙˆØ±'), required: true, resolveDisplayValue: resolveRoleDisplayValue },
+      ],
+    },
     preview: async (input) => preview('Assign user role', 'The user role will be changed after confirmation.', input),
     execute: (input, context) => {
       erpScope(context, 'permissions.assign', AI_ASSISTANT_PERMISSIONS.useWriteTools);
@@ -1090,6 +2294,16 @@ export const erpTools: AiTool[] = [
     requiredPermission: 'permissions.assign',
     riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
     schema: assignClientsInput,
+    form: {
+      title: text('Affecter clients utilisateur', 'Assign user clients', 'ØªØ¹ÙŠÙŠÙ† Ø¹Ù…Ù„Ø§Ø¡ Ù„Ù„Ù…Ø³ØªØ®Ø¯Ù…'),
+      description: text('Remplacez la liste des clients autorises via une previsualisation securisee.', 'Replace the authorized client list through a secure preview.', 'Ø§Ø³ØªØ¨Ø¯Ù„ Ù‚Ø§Ø¦Ù…Ø© Ø§Ù„Ø¹Ù…Ù„Ø§Ø¡ Ø§Ù„Ù…Ø³Ù…ÙˆØ­ÙŠÙ† Ø¹Ø¨Ø± Ù…Ø¹Ø§ÙŠÙ†Ø© Ø¢Ù…Ù†Ø©.'),
+      fields: [
+        { path: 'userId', type: 'entity', entityType: 'user', label: text('Utilisateur', 'User', 'Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù…'), required: true, resolveDisplayValue: resolveUserDisplayValue },
+        { path: 'clientIds', type: 'array', label: text('Clients', 'Clients', 'Ø§Ù„Ø¹Ù…Ù„Ø§Ø¡'), required: true, minItems: 1, itemFields: [
+          { path: 'value', type: 'entity', entityType: 'customer', label: text('Client', 'Client', 'Ø§Ù„Ø¹Ù…ÙŠÙ„'), required: true, resolveDisplayValue: resolveCustomerDisplayValue },
+        ] },
+      ],
+    },
     preview: async (input) => preview('Assign user clients', 'The user client assignments will be replaced after confirmation.', { userId: input.userId, clientCount: input.clientIds.length }),
     execute: (input, context) => {
       erpScope(context, 'permissions.assign', AI_ASSISTANT_PERMISSIONS.useWriteTools);
@@ -1171,6 +2385,30 @@ export const erpTools: AiTool[] = [
     },
   },
   {
+    name: 'get_settings_email_status',
+    description: 'Get backend email delivery configuration status.',
+    module: 'settings',
+    requiredPermission: 'settings.update',
+    riskLevel: AiToolRiskLevel.READ_ONLY,
+    schema: z.object({}).strict(),
+    execute: async (_input, context) => {
+      erpScope(context, 'settings.update');
+      return settingsService.getEmailStatus();
+    },
+  },
+  {
+    name: 'get_settings_email_logs',
+    description: 'Get recent backend email logs from company settings.',
+    module: 'settings',
+    requiredPermission: 'settings.view',
+    riskLevel: AiToolRiskLevel.READ_ONLY,
+    schema: z.object({}).strict(),
+    execute: (_input, context) => {
+      erpScope(context, 'settings.view');
+      return settingsService.getRecentEmailLogs();
+    },
+  },
+  {
     name: 'update_company_settings',
     description: 'Update company, VAT and billing settings.',
     module: 'settings',
@@ -1184,6 +2422,32 @@ export const erpTools: AiTool[] = [
     },
   },
   {
+    name: 'delete_company_asset',
+    description: 'Delete the configured company signature or stamp asset.',
+    module: 'settings',
+    requiredPermission: 'settings.update',
+    riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
+    schema: settingsAssetInput,
+    preview: async (input) => preview('Delete company asset', 'The selected company asset will be deleted after confirmation.', input),
+    execute: (input, context) => {
+      erpScope(context, 'settings.update', AI_ASSISTANT_PERMISSIONS.useWriteTools);
+      return settingsService.deleteCompanyAsset(input.kind);
+    },
+  },
+  {
+    name: 'remove_company_asset_background',
+    description: 'Remove the background from the configured company signature or stamp asset.',
+    module: 'settings',
+    requiredPermission: 'settings.update',
+    riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
+    schema: settingsAssetInput,
+    preview: async (input) => preview('Remove company asset background', 'The selected company asset will be cleaned up after confirmation.', input),
+    execute: (input, context) => {
+      erpScope(context, 'settings.update', AI_ASSISTANT_PERMISSIONS.useWriteTools);
+      return settingsService.removeCompanyAssetBackground(input.kind);
+    },
+  },
+  {
     name: 'send_test_email',
     description: 'Send a test email from the configured backend SMTP transport.',
     module: 'email',
@@ -1194,6 +2458,27 @@ export const erpTools: AiTool[] = [
     execute: (input, context) => {
       erpScope(context, 'settings.update', AI_ASSISTANT_PERMISSIONS.useWriteTools);
       return settingsService.sendTestEmail(context.user, input);
+    },
+  },
+  {
+    name: 'get_contract_email_history',
+    description: 'Get contract email delivery history.',
+    module: 'email',
+    requiredPermission: 'contracts.email.history',
+    riskLevel: AiToolRiskLevel.READ_ONLY,
+    schema: entityIdInput,
+    execute: (input, context) => contractService.getEmailHistory(input.id, context.user.id, erpScope(context, 'contracts.email.history')),
+  },
+  {
+    name: 'list_contract_templates',
+    description: 'List available contract templates.',
+    module: 'contracts',
+    requiredPermission: 'contract_templates.view',
+    riskLevel: AiToolRiskLevel.READ_ONLY,
+    schema: z.object({ includeInactive: z.boolean().optional().default(false) }).strict(),
+    execute: (input, context) => {
+      erpScope(context, 'contract_templates.view');
+      return contractService.listTemplates(input.includeInactive);
     },
   },
 ];

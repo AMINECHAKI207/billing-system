@@ -21,10 +21,12 @@ declare global {
   var __prisma: PrismaClient | undefined;
 }
 
+const enablePrismaQueryLogs = isDev && process.env.PRISMA_QUERY_LOGS === 'true';
+
 const basePrisma: PrismaClient =
   global.__prisma ??
   new PrismaClient({
-    log: isDev
+    log: enablePrismaQueryLogs
       ? [
           { emit: 'event', level: 'query' },
           { emit: 'event', level: 'error' },
@@ -36,7 +38,7 @@ const basePrisma: PrismaClient =
 export const prisma: PrismaClient = basePrisma.$extends(createAuditExtension(basePrisma)) as unknown as PrismaClient;
 
 // In dev, log all SQL queries for debugging
-if (isDev) {
+if (enablePrismaQueryLogs) {
   basePrisma.$on('query' as never, (e: { query: string; duration: number }) => {
     logger.debug(`Prisma Query [${e.duration}ms]`, { query: e.query });
   });

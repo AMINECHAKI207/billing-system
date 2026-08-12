@@ -1957,7 +1957,9 @@
       "cancel": "Unable to cancel this AI action.",
       "revise": "Unable to regenerate this action preview.",
       "archive": "Unable to archive this conversation.",
-      "copy": "Unable to copy the response."
+      "copy": "Unable to copy the response.",
+      "contractNotInvoiceable": "Only sent, viewed, or active contracts can be invoiced.",
+      "contractSignatureIncomplete": "The contract signature workflow must be completed before invoicing."
     },
     "archiveConversation": "Archive conversation",
     "conversationArchived": "Conversation archived.",
@@ -2084,7 +2086,9 @@
       "USD": "USD",
       "EUR": "EUR"
     },
-    "itemsCount": "{{count}} item(s)"
+    "itemsCount": "{{count}} item(s)",
+    "lineItem": "Line {{index}}",
+    "addLine": "Add line"
   },
   "notifications": {
     "confirm": {

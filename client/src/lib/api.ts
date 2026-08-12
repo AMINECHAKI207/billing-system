@@ -151,6 +151,70 @@ export type AiToolDefinition = {
   requiredPermission: string;
 };
 
+export type AiStructuredFormOption = {
+  value: string;
+  label: string;
+};
+
+export type AiStructuredFormField = {
+  path: string;
+  type: 'text' | 'textarea' | 'number' | 'currency' | 'date' | 'datetime' | 'boolean' | 'select' | 'entity' | 'array';
+  label: string;
+  description?: string;
+  placeholder?: string;
+  required?: boolean;
+  readOnly?: boolean;
+  hidden?: boolean;
+  entityType?:
+    | 'customer'
+    | 'contract'
+    | 'invoice'
+    | 'product'
+    | 'expenseCategory'
+    | 'expenseType'
+    | 'user'
+    | 'role'
+    | 'permission'
+    | 'creditNoteReason';
+  minItems?: number;
+  value?: unknown;
+  displayValue?: string;
+  options?: AiStructuredFormOption[];
+  itemFields?: Array<{
+    path: string;
+    type: 'text' | 'textarea' | 'number' | 'currency' | 'date' | 'datetime' | 'boolean' | 'select' | 'entity';
+    label: string;
+    description?: string;
+    placeholder?: string;
+    required?: boolean;
+    readOnly?: boolean;
+    hidden?: boolean;
+    entityType?:
+      | 'customer'
+      | 'contract'
+      | 'invoice'
+      | 'product'
+      | 'expenseCategory'
+      | 'expenseType'
+      | 'user'
+      | 'role'
+      | 'permission'
+      | 'creditNoteReason';
+    options?: AiStructuredFormOption[];
+  }>;
+};
+
+export type AiStructuredForm = {
+  toolName: string;
+  title: string;
+  description: string;
+  submitLabel: string;
+  values: Record<string, unknown>;
+  missingFields: string[];
+  fields: AiStructuredFormField[];
+  language: 'fr' | 'en' | 'ar';
+};
+
 export type AiPendingAction = {
   id: string;
   toolName: string;
@@ -163,6 +227,7 @@ export type AiPendingAction = {
   resultPayload?: unknown;
   errorPayload?: unknown;
   createdAt: string;
+  idempotencyKey?: string;
 };
 
 export type AiMessage = {
@@ -248,7 +313,9 @@ export async function executeAiTool(input: {
   toolName: string;
   input: Record<string, unknown>;
   conversationId?: string;
+  language?: 'fr' | 'en' | 'ar';
   idempotencyKey?: string;
+  replaceActionId?: string;
 }): Promise<unknown> {
   const response = await api.post<ApiResponse<unknown>>('/ai-assistant/tools/execute', input);
   return response.data.data;
@@ -1495,4 +1562,16 @@ function downloadBlob(blob: Blob, fileName: string) {
   link.click();
   link.remove();
   URL.revokeObjectURL(blobUrl);
+}
+
+export type TelegramLinkCodeResponse = {
+  code: string;
+  expiresAt: string;
+  expiresInMinutes: number;
+};
+
+export async function generateTelegramLinkCode(): Promise<TelegramLinkCodeResponse> {
+  const response = await api.post("/telegram/link-code");
+
+  return response.data.data;
 }

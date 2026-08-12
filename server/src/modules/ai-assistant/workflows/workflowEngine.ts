@@ -3,7 +3,13 @@ import { z } from 'zod';
 import { ApiError } from '@utils/ApiError';
 import type { AiTool, ToolContext, ToolPreview } from '../tools/toolTypes';
 
-type WorkflowStepStatus = 'COMPLETED' | 'WAITING_CONFIRMATION' | 'FAILED' | 'SKIPPED';
+type WorkflowStepStatus =
+  | 'NOT_STARTED'
+  | 'IN_PROGRESS'
+  | 'COMPLETED'
+  | 'WAITING_CONFIRMATION'
+  | 'FAILED'
+  | 'SKIPPED';
 
 type WorkflowStep = {
   key: string;
@@ -90,8 +96,8 @@ async function previewContractInvoiceWorkflow(
     { key: 'find_timesheets', label: 'Find Approved Timesheets', riskLevel: AiToolRiskLevel.READ_ONLY, status: 'COMPLETED', startedAt: nowIso() },
     { key: 'prepare_invoice', label: 'Prepare Invoice Preview', riskLevel: AiToolRiskLevel.READ_ONLY, status: 'COMPLETED', startedAt: nowIso() },
     { key: 'create_invoice', label: 'Create Invoice', riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED, status: 'WAITING_CONFIRMATION', startedAt: nowIso() },
-    { key: 'generate_pdf', label: 'Prepare Invoice PDF', riskLevel: AiToolRiskLevel.READ_ONLY, status: 'WAITING_CONFIRMATION', startedAt: nowIso() },
-    { key: 'audit', label: 'Record Audit Trail', riskLevel: AiToolRiskLevel.READ_ONLY, status: 'WAITING_CONFIRMATION', startedAt: nowIso() },
+    { key: 'generate_pdf', label: 'Prepare Invoice PDF', riskLevel: AiToolRiskLevel.READ_ONLY, status: 'NOT_STARTED', startedAt: nowIso() },
+    { key: 'audit', label: 'Record Audit Trail', riskLevel: AiToolRiskLevel.READ_ONLY, status: 'NOT_STARTED', startedAt: nowIso() },
   ]);
 
   try {
@@ -101,9 +107,19 @@ async function previewContractInvoiceWorkflow(
       executeTool(tools, 'prepare_invoice_preview', input, context),
     ]);
 
-    const steps = run.steps.map((step) => (
-      step.riskLevel === AiToolRiskLevel.READ_ONLY ? completeStep(step) : waitingStep(step)
-    ));
+    const contractRecord = contract && typeof contract === 'object' ? contract as Record<string, unknown> : {};
+    const readyEntries = Array.isArray(readyTimesheets) ? readyTimesheets : [];
+    const pricingType = typeof contractRecord.pricingType === 'string' ? contractRecord.pricingType : '';
+
+    if ((pricingType === 'HOURLY' || pricingType === 'DAILY') && readyEntries.length === 0) {
+      throw ApiError.badRequest('No approved uninvoiced entries for this billing period');
+    }
+
+    const steps = run.steps.map((step) => {
+      if (step.key === 'create_invoice') return waitingStep(step);
+      if (step.key === 'generate_pdf' || step.key === 'audit') return step;
+      return completeStep(step);
+    });
     const planned = completeWorkflow({ ...run, status: 'WAITING_CONFIRMATION', steps }, 'WAITING_CONFIRMATION');
 
     return {
@@ -116,24 +132,16 @@ async function previewContractInvoiceWorkflow(
         invoicePreview,
       },
     };
-  } catch (error) {
-    const steps = run.steps.map((step, index) => (index === 0 ? failStep(step, error) : { ...step, status: 'SKIPPED' as const }));
-    return {
-      title: 'Contract invoice workflow',
-      description: 'The workflow could not be prepared safely.',
-      summary: {
-        workflow: completeWorkflow({ ...run, steps }, 'FAILED'),
-        error: error instanceof Error ? error.message : 'Workflow preparation failed',
-      },
-    };
-  }
+} catch (error) {
+  throw error;
+}
 }
 
 export function createEnterpriseWorkflowTools(tools: Map<string, AiTool>): AiTool[] {
   return [
     {
       name: 'contract_invoice_workflow',
-      description: 'Plan and execute the contract to invoice enterprise workflow using existing ERP tools.',
+      description: 'Create an invoice FROM AN EXISTING CONTRACT\'s approved billable timesheets/schedule (takes only a contractId). This is the correct tool whenever the user asks to invoice/bill a contract, a client tied to a known contract, or "this contract" from conversation context — do not use create_invoice for these cases.',
       module: 'contracts',
       requiredPermission: 'contracts.billing.generate',
       riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
@@ -142,27 +150,15 @@ export function createEnterpriseWorkflowTools(tools: Map<string, AiTool>): AiToo
       execute: async (input, context) => {
         const run = createWorkflowRun('Contract to invoice workflow', [
           { key: 'validate', label: 'Validate Business Rules', riskLevel: AiToolRiskLevel.READ_ONLY, status: 'COMPLETED', startedAt: nowIso() },
-          { key: 'create_invoice', label: 'Create Invoice', riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED, status: 'COMPLETED', startedAt: nowIso() },
-          { key: 'generate_pdf', label: 'Prepare Invoice PDF', riskLevel: AiToolRiskLevel.READ_ONLY, status: 'COMPLETED', startedAt: nowIso() },
-          { key: 'audit', label: 'Record Audit Trail', riskLevel: AiToolRiskLevel.READ_ONLY, status: 'COMPLETED', startedAt: nowIso() },
+          { key: 'create_invoice', label: 'Create Invoice', riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED, status: 'IN_PROGRESS', startedAt: nowIso() },
+          { key: 'generate_pdf', label: 'Prepare Invoice PDF', riskLevel: AiToolRiskLevel.READ_ONLY, status: 'NOT_STARTED', startedAt: nowIso() },
+          { key: 'audit', label: 'Record Audit Trail', riskLevel: AiToolRiskLevel.READ_ONLY, status: 'NOT_STARTED', startedAt: nowIso() },
         ]);
 
+        let invoice: unknown;
         try {
           await executeTool(tools, 'prepare_invoice_preview', input, context);
-          const invoice = await executeTool(tools, 'generate_invoice_from_timesheets', input, context);
-          const invoiceRecord = invoice && typeof invoice === 'object' ? invoice as Record<string, unknown> : {};
-          const invoiceId = typeof invoiceRecord.id === 'string' ? invoiceRecord.id : '';
-          const pdf = invoiceId ? await executeTool(tools, 'generate_invoice_pdf', { invoiceId }, context) : null;
-
-          return {
-            workflow: completeWorkflow({
-              ...run,
-              status: 'COMPLETED',
-              steps: run.steps.map(completeStep),
-            }, 'COMPLETED'),
-            invoice,
-            pdf,
-          };
+          invoice = await executeTool(tools, 'generate_invoice_from_timesheets', input, context);
         } catch (error) {
           const failedRun = completeWorkflow({
             ...run,
@@ -173,6 +169,36 @@ export function createEnterpriseWorkflowTools(tools: Map<string, AiTool>): AiToo
             JSON.stringify({ workflow: failedRun }),
           ]);
         }
+
+        // The invoice already exists at this point: a PDF failure must not be reported
+        // as a total workflow failure, or the pending action would be marked FAILED while
+        // hiding that the invoice was actually created.
+        const invoiceRecord = invoice && typeof invoice === 'object' ? invoice as Record<string, unknown> : {};
+        const invoiceId = typeof invoiceRecord.id === 'string' ? invoiceRecord.id : '';
+        let pdf: unknown = null;
+        let pdfError: string | undefined;
+        let pdfStep = run.steps.find((step) => step.key === 'generate_pdf')!;
+        try {
+          pdf = invoiceId ? await executeTool(tools, 'generate_invoice_pdf', { invoiceId }, context) : null;
+          pdfStep = completeStep(pdfStep);
+        } catch (error) {
+          pdfStep = failStep(pdfStep, error);
+          pdfError = pdfStep.error;
+        }
+
+        const steps = run.steps.map((step) => {
+          if (step.key === 'create_invoice') return completeStep(step);
+          if (step.key === 'generate_pdf') return pdfStep;
+          if (step.key === 'audit') return completeStep({ ...step, status: 'IN_PROGRESS' });
+          return completeStep(step);
+        });
+
+        return {
+          workflow: completeWorkflow({ ...run, status: 'COMPLETED', steps }, 'COMPLETED'),
+          invoice,
+          pdf,
+          ...(pdfError ? { pdfError } : {}),
+        };
       },
     },
   ];

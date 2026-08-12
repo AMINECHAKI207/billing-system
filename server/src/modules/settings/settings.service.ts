@@ -99,6 +99,36 @@ export class SettingsService {
       delivery,
     };
   }
+  async sendTelegramLinkCodeEmail(
+  user: { name: string; email: string },
+  code: string,
+  expiresAt: Date
+) {
+  const delivery = await sendEmail({
+    to: user.email,
+    subject: "ERP Telegram verification code",
+    text: [
+      `Bonjour ${user.name},`,
+      "",
+      "Une demande de connexion Telegram a ete recue pour votre compte ERP.",
+      "",
+      `Votre code de connexion est : ${code}`,
+      "",
+      "Commande Telegram :",
+      `/link ${code}`,
+      "",
+      `Ce code expire a : ${expiresAt.toLocaleString()}`,
+      "Il ne peut etre utilise qu'une seule fois.",
+      "",
+      "Si vous n'etes pas a l'origine de cette demande, ignorez cet email.",
+    ].join("\n"),
+  });
+
+  return {
+    to: user.email,
+    delivery,
+  };
+}
 
   async getRecentEmailLogs() {
     return settingsRepository.findRecentEmailLogs(5);

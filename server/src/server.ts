@@ -4,6 +4,7 @@ import { disconnectDatabase, prisma, setDatabaseConnected } from '@config/databa
 import { createApp } from './app';
 import http from 'http';
 import { startRecurringBillingJob, stopRecurringBillingJob } from './jobs/recurringBilling.job';
+import { startTelegramPolling } from "./modules/telegram/telegram.service";
 
 async function bootstrap(): Promise<void> {
   const app = createApp();
@@ -23,6 +24,7 @@ async function bootstrap(): Promise<void> {
     setDatabaseConnected(true);
     logger.info('Database connected successfully');
     startRecurringBillingJob();
+    startTelegramPolling();
   } catch (error) {
     setDatabaseConnected(false);
     logger.error('Failed to connect to database', { error });

@@ -1,5 +1,10 @@
 import crypto from 'crypto';
-import { AiToolRiskLevel, ContractTimeEntryStatus } from '@prisma/client';
+import {
+  AiToolRiskLevel,
+  ContractTimeEntryStatus,
+  ContractStatus,
+  ContractSignatureStatus,
+} from '@prisma/client';
 import { z } from 'zod';
 import { authorizePermission, permissionScope } from '@modules/rbac/accessScope';
 import { customerService } from '@modules/customer/customer.service';
@@ -8,7 +13,7 @@ import { invoiceService } from '@modules/invoice/invoice.service';
 import { auditService } from '@modules/audit/audit.service';
 import { ApiError } from '@utils/ApiError';
 import { AI_ASSISTANT_PERMISSIONS } from '../aiAssistant.permissions';
-import type { AiTool, ToolContext, ToolPreview } from './toolTypes';
+import type { AiLocalizedText, AiTool, ToolContext, ToolPreview } from './toolTypes';
 
 const uuid = z.string().uuid();
 const limit = z.coerce.number().int().min(1).max(25).default(10);
@@ -143,6 +148,32 @@ function money(value: unknown) {
   return value == null ? null : Number(value);
 }
 
+function text(fr: string, en: string, ar: string): AiLocalizedText {
+  return { fr, en, ar };
+}
+
+async function resolveContractDisplayValue(value: unknown, draft: Record<string, unknown>, context: ToolContext) {
+  if (typeof draft.contractNumber === 'string' && draft.contractNumber.trim()) return draft.contractNumber.trim();
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const contract = await contractService.getById(value, context.user.id, permissionScope(context.user.permissionScopes, 'contracts.view'));
+    return contract.contractNumber || contract.title || value;
+  } catch {
+    return value;
+  }
+}
+
+async function resolveContractClientDisplayValue(value: unknown, draft: Record<string, unknown>, context: ToolContext) {
+  if (typeof draft.clientName === 'string' && draft.clientName.trim()) return draft.clientName.trim();
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const customer = await customerService.getCustomerById(value, context.user.id, permissionScope(context.user.permissionScopes, 'clients.view'));
+    return customer.company || customer.name || value;
+  } catch {
+    return value;
+  }
+}
+
 function summarizeContract(contract: any) {
   return {
     id: contract.id,
@@ -264,7 +295,23 @@ function buildInvoicePreview(contract: any, input: { periodStart?: string; perio
 async function getContract(context: ToolContext, contractId: string, permission = 'contracts.view') {
   return contractService.getById(contractId, context.user.id, contractScope(context, permission));
 }
+function assertInvoiceReadyContract(contract: any) {
+  const allowedStatus =
+    contract.status === ContractStatus.ACTIVE ||
+    contract.status === ContractStatus.SENT ||
+    contract.status === ContractStatus.VIEWED;
 
+  if (!allowedStatus) {
+    throw ApiError.badRequest('Only active or sent contracts can be invoiced');
+  }
+
+  if (
+    contract.currentVersion?.signatureStatus !==
+    ContractSignatureStatus.COMPLETED
+  ) {
+    throw ApiError.badRequest('Contract signature workflow is incomplete');
+  }
+}
 async function previewContractAction(context: ToolContext, contractId: string, title: string, description: string): Promise<ToolPreview> {
   const contract = await getContract(context, contractId);
   return {
@@ -477,6 +524,30 @@ export const aiTools: AiTool[] = [
     requiredPermission: 'contracts.time_entries.create',
     riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
     schema: createTimesheetInput,
+    form: {
+      title: text('Créer un temps facturable', 'Create billable timesheet', 'إنشاء إدخال وقت قابل للفوترة'),
+      description: text('Complétez les informations de temps avant de générer la prévisualisation.', 'Complete the timesheet information before generating the preview.', 'أكمل بيانات الوقت قبل إنشاء المعاينة.'),
+      buildInitialValue: (partialInput) => ({
+        breakMinutes: 0,
+        billable: true,
+        submit: false,
+        ...partialInput,
+      }),
+      fields: [
+        { path: 'contractId', type: 'entity', entityType: 'contract', label: text('Contrat', 'Contract', 'العقد'), required: true, resolveDisplayValue: resolveContractDisplayValue },
+        { path: 'clientId', type: 'entity', entityType: 'customer', label: text('Client', 'Customer', 'العميل'), readOnly: true, resolveDisplayValue: resolveContractClientDisplayValue },
+        { path: 'workDate', type: 'date', label: text('Date de travail', 'Work date', 'تاريخ العمل'), required: true },
+        { path: 'startTime', type: 'datetime', label: text('Début', 'Start', 'البداية') },
+        { path: 'endTime', type: 'datetime', label: text('Fin', 'End', 'النهاية') },
+        { path: 'quantity', type: 'number', label: text('Quantité', 'Quantity', 'الكمية') },
+        { path: 'breakMinutes', type: 'number', label: text('Pause (minutes)', 'Break (minutes)', 'الاستراحة (بالدقائق)') },
+        { path: 'activityType', type: 'text', label: text('Activité', 'Activity', 'النشاط') },
+        { path: 'description', type: 'textarea', label: text('Description', 'Description', 'الوصف'), required: true },
+        { path: 'internalNote', type: 'textarea', label: text('Note interne', 'Internal note', 'ملاحظة داخلية') },
+        { path: 'billable', type: 'boolean', label: text('Facturable', 'Billable', 'قابل للفوترة') },
+        { path: 'submit', type: 'boolean', label: text('Soumettre après création', 'Submit after creation', 'إرسال بعد الإنشاء') },
+      ],
+    },
     preview: async (input, context) => previewContractAction(context, input.contractId, 'Create contract timesheet', input.description),
     execute: async (input, context) => contractService.createTimeEntry(input.contractId, context.user, contractScope(context, 'contracts.time_entries.create', AI_ASSISTANT_PERMISSIONS.useWriteTools), input),
   },
@@ -530,10 +601,17 @@ export const aiTools: AiTool[] = [
     requiredPermission: 'contracts.billing.generate',
     riskLevel: AiToolRiskLevel.READ_ONLY,
     schema: generateInvoiceInput,
-    execute: async (input, context) => {
-      const contract: any = await getContract(context, input.contractId, 'contracts.billing.generate');
-      return buildInvoicePreview(contract, input);
-    },
+execute: async (input, context) => {
+  const contract: any = await getContract(
+    context,
+    input.contractId,
+    'contracts.billing.generate'
+  );
+
+  assertInvoiceReadyContract(contract);
+
+  return buildInvoicePreview(contract, input);
+},
   },
   {
     name: 'generate_invoice_from_timesheets',

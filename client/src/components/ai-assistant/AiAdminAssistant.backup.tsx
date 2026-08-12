@@ -45,11 +45,8 @@ import {
   type AiAssistantContext,
   type AiMessage,
   type AiPendingAction,
-  type AiStructuredForm,
 } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
-import { getInvalidationKeysForAiAction } from './queryInvalidation.ts';
-import { AiBusinessForm } from './AiBusinessForm';
 
 type Props = {
   context?: AiAssistantContext;
@@ -61,7 +58,6 @@ type ExecutionResult = {
   toolName?: string;
   result?: unknown;
   action?: AiPendingAction;
-  form?: AiStructuredForm;
 };
 
 type Translate = ReturnType<typeof useTranslation>['t'];
@@ -77,23 +73,6 @@ export function AiAdminAssistant({ context, getApiErrorMessage }: Props) {
   const [conversationId, setConversationId] = useState('');
   const [draft, setDraft] = useState('');
   const [editingAction, setEditingAction] = useState<AiPendingAction | null>(null);
-  const [lockedActionIds, setLockedActionIds] = useState<string[]>([]);
-  const [formErrorsByMessageId, setFormErrorsByMessageId] = useState<Record<string, Record<string, string>>>({});
-  const [messageExecutionOverrides, setMessageExecutionOverrides] = useState<Record<string, ExecutionResult | null>>({});
-
-  const clearPendingActionOverride = (actionId: string) => {
-    setMessageExecutionOverrides((current) => {
-      let changed = false;
-      const nextEntries = Object.entries(current).map(([messageId, execution]) => {
-        if (execution?.type === 'pending_action' && execution.action?.id === actionId) {
-          changed = true;
-          return [messageId, null] as const;
-        }
-        return [messageId, execution] as const;
-      });
-      return changed ? Object.fromEntries(nextEntries) : current;
-    });
-  };
 
   const language = i18n.language.startsWith('ar') ? 'ar' : i18n.language.startsWith('en') ? 'en' : 'fr';
 
@@ -101,12 +80,6 @@ export function AiAdminAssistant({ context, getApiErrorMessage }: Props) {
     queryKey: ['ai-assistant', 'conversation', conversationId],
     queryFn: () => getAiConversation(conversationId),
     enabled: open && Boolean(conversationId),
-    refetchInterval: (query) => {
-      const conversation = query.state.data as AiConversation | undefined;
-      return conversation?.pendingActions?.some((action) => action.status === 'PENDING' || action.status === 'CONFIRMED')
-        ? 3000
-        : false;
-    },
   });
 
   const historyQuery = useQuery({
@@ -125,7 +98,7 @@ export function AiAdminAssistant({ context, getApiErrorMessage }: Props) {
   const createConversationMutation = useMutation({
     mutationFn: () => createAiConversation(language),
     onSuccess: (conversation) => {
-      setConversationId((current) => current || conversation.id);
+      setConversationId(conversation.id);
       setHistoryOpen(false);
     },
     onError: (error) => toast.error(getApiErrorMessage(error, t('aiAssistant.errors.open'))),
@@ -137,12 +110,8 @@ export function AiAdminAssistant({ context, getApiErrorMessage }: Props) {
       setConversationId(id);
       return sendAiAssistantMessage(id, content, language, context);
     },
-    onSuccess: async ({ executionResult, message }) => {
+    onSuccess: async () => {
       setDraft('');
-      setMessageExecutionOverrides((current) => ({
-        ...current,
-        [message.id]: executionResult && typeof executionResult === 'object' ? executionResult as ExecutionResult : null,
-      }));
       await queryClient.invalidateQueries({ queryKey: ['ai-assistant'] });
     },
     onError: (error) => toast.error(getApiErrorMessage(error, t('aiAssistant.errors.send'))),
@@ -150,45 +119,25 @@ export function AiAdminAssistant({ context, getApiErrorMessage }: Props) {
 
   const confirmMutation = useMutation({
     mutationFn: confirmAiAction,
-    onSuccess: async (payload) => {
+    onSuccess: async () => {
       toast.success(t('aiAssistant.actionConfirmed'));
-      clearPendingActionOverride(payload.action.id);
       await queryClient.invalidateQueries({ queryKey: ['ai-assistant'] });
-      await conversationQuery.refetch();
-      const keys = getInvalidationKeysForAiAction({ toolName: payload.action.toolName });
-      await Promise.all(keys.map((queryKey) => queryClient.invalidateQueries({ queryKey })));
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['contracts'] }),
+        queryClient.invalidateQueries({ queryKey: ['invoices'] }),
+        queryClient.invalidateQueries({ queryKey: ['reports'] }),
+      ]);
     },
-    onError: async (error) => {
-      toast.error(
-        getApiErrorMessage(error, t('aiAssistant.errors.confirm'))
-      );
-      await queryClient.invalidateQueries({
-        queryKey: ['ai-assistant'],
-      });
-      await conversationQuery.refetch();
-    },
-    onSettled: async (_data, _error, actionId) => {
-      await conversationQuery.refetch();
-      setLockedActionIds((current) => current.filter((id) => id !== actionId));
-    },
+    onError: (error) => toast.error(getApiErrorMessage(error, t('aiAssistant.errors.confirm'))),
   });
 
   const cancelMutation = useMutation({
     mutationFn: cancelAiAction,
-    onSuccess: async (_payload, actionId) => {
+    onSuccess: async () => {
       toast.info(t('aiAssistant.actionCancelled'));
-      clearPendingActionOverride(actionId);
       await queryClient.invalidateQueries({ queryKey: ['ai-assistant'] });
-      await conversationQuery.refetch();
     },
-    onError: async (error) => {
-      toast.error(getApiErrorMessage(error, t('aiAssistant.errors.cancel')));
-      await conversationQuery.refetch();
-    },
-    onSettled: async (_data, _error, actionId) => {
-      await conversationQuery.refetch();
-      setLockedActionIds((current) => current.filter((id) => id !== actionId));
-    },
+    onError: (error) => toast.error(getApiErrorMessage(error, t('aiAssistant.errors.cancel'))),
   });
 
   const archiveConversationMutation = useMutation({
@@ -205,56 +154,27 @@ export function AiAdminAssistant({ context, getApiErrorMessage }: Props) {
 
   const reviseActionMutation = useMutation({
     mutationFn: async ({ action, input }: { action: AiPendingAction; input: Record<string, unknown> }) => {
-      return executeAiTool({
+      const result = await executeAiTool({
         toolName: action.toolName,
         input,
         conversationId,
-        idempotencyKey: action.idempotencyKey,
-        replaceActionId: action.id,
+        idempotencyKey: `ai-revision-${action.id}-${Date.now()}`,
       });
+      await cancelAiAction(action.id);
+      return result;
     },
     onSuccess: async () => {
       setEditingAction(null);
       toast.success(t('aiAssistant.actionRevised'));
       await queryClient.invalidateQueries({ queryKey: ['ai-assistant'] });
-      await conversationQuery.refetch();
     },
     onError: (error) => toast.error(getApiErrorMessage(error, t('aiAssistant.errors.revise'))),
   });
 
-  const structuredFormMutation = useMutation({
-    mutationFn: async ({ conversationId: targetConversationId, messageId, form, values }: { conversationId: string; messageId: string; form: AiStructuredForm; values: Record<string, unknown> }) => {
-      return {
-        messageId,
-        result: await executeAiTool({
-          toolName: form.toolName,
-          input: values,
-          conversationId: targetConversationId,
-          language,
-        }),
-      };
-    },
-    onSuccess: async ({ messageId, result }) => {
-      setFormErrorsByMessageId((current) => {
-        const next = { ...current };
-        delete next[messageId];
-        return next;
-      });
-      setMessageExecutionOverrides((current) => ({
-        ...current,
-        [messageId]: result && typeof result === 'object' ? result as ExecutionResult : null,
-      }));
-      await queryClient.invalidateQueries({ queryKey: ['ai-assistant'] });
-      await conversationQuery.refetch();
-    },
-    onError: (error, variables) => {
-      setFormErrorsByMessageId((current) => ({
-        ...current,
-        [variables.messageId]: extractAiFieldErrors(error),
-      }));
-      toast.error(getApiErrorMessage(error, t('aiAssistant.errors.send')));
-    },
-  });
+  useEffect(() => {
+    if (!open || conversationId || createConversationMutation.isPending) return;
+    createConversationMutation.mutate();
+  }, [conversationId, createConversationMutation, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -266,24 +186,10 @@ export function AiAdminAssistant({ context, getApiErrorMessage }: Props) {
   }, [open]);
 
   const conversation = conversationQuery.data;
-  const pendingActions = useMemo(() => {
-    const conversationActions = (conversation?.pendingActions ?? []).filter((action) => action.status === 'PENDING' || action.status === 'CONFIRMED');
-    const overrideActions = Object.values(messageExecutionOverrides)
-      .map((execution) => execution?.type === 'pending_action' ? execution.action ?? null : null)
-      .filter((action): action is AiPendingAction => Boolean(action && (action.status === 'PENDING' || action.status === 'CONFIRMED')));
-
-    const actionMap = new Map<string, AiPendingAction>();
-
-    for (const action of overrideActions) {
-      actionMap.set(action.id, action);
-    }
-
-    for (const action of conversationActions) {
-      actionMap.set(action.id, action);
-    }
-
-    return Array.from(actionMap.values());
-  }, [conversation, messageExecutionOverrides]);
+  const pendingActions = useMemo(
+    () => (conversation?.pendingActions ?? []).filter((action) => action.status === 'PENDING'),
+    [conversation]
+  );
 
   const messages = useMemo(() => conversation?.messages ?? [], [conversation?.messages]);
   const latestAssistantMessageId = useMemo(
@@ -299,7 +205,6 @@ export function AiAdminAssistant({ context, getApiErrorMessage }: Props) {
 
   const startNewConversation = () => {
     setDraft('');
-    setMessageExecutionOverrides({});
     setConversationId('');
     createConversationMutation.mutate();
   };
@@ -329,14 +234,8 @@ export function AiAdminAssistant({ context, getApiErrorMessage }: Props) {
   };
 
   const confirmLatestPendingAction = (action: AiPendingAction) => {
-    setLockedActionIds((current) => current.includes(action.id) ? current : [...current, action.id]);
-    confirmMutation.mutate(action.id);
-  };
-
-  const cancelLatestPendingAction = (action: AiPendingAction) => {
-    setLockedActionIds((current) => current.includes(action.id) ? current : [...current, action.id]);
-    cancelMutation.mutate(action.id);
-  };
+  confirmMutation.mutate(action.id);
+};
 
   return (
     <>
@@ -412,14 +311,10 @@ export function AiAdminAssistant({ context, getApiErrorMessage }: Props) {
                   {messages.map((message) => (
                     <MessageBubble
                       canRegenerate={message.id === latestAssistantMessageId && !sendMutation.isPending}
-                      executionOverride={messageExecutionOverrides[message.id] ?? null}
-                      fieldErrors={formErrorsByMessageId[message.id] ?? {}}
                       key={message.id}
                       message={message}
                       onCopy={() => copyMessage(message.content)}
                       onRegenerate={regenerateLastResponse}
-                      onSubmitStructuredForm={(form, values) => structuredFormMutation.mutate({ conversationId, messageId: message.id, form, values })}
-                      structuredFormBusy={structuredFormMutation.isPending}
                     />
                   ))}
                   {sendMutation.isPending ? (
@@ -440,9 +335,9 @@ export function AiAdminAssistant({ context, getApiErrorMessage }: Props) {
                   {pendingActions.map((action) => (
                     <PendingActionCard
                       action={action}
-                      disabled={confirmMutation.isPending || cancelMutation.isPending || lockedActionIds.includes(action.id)}
+                      disabled={confirmMutation.isPending || cancelMutation.isPending}
                       key={action.id}
-                      onCancel={() => cancelLatestPendingAction(action)}
+                      onCancel={() => cancelMutation.mutate(action.id)}
                       onConfirm={() => confirmLatestPendingAction(action)}
                       onModify={() => setEditingAction(action)}
                     />
@@ -1261,31 +1156,19 @@ function ConversationHistory({ conversations, disabled, loading, onArchive, onSe
   );
 }
 
-function MessageBubble({ canRegenerate, executionOverride, fieldErrors, message, onCopy, onRegenerate, onSubmitStructuredForm, structuredFormBusy }: {
+function MessageBubble({ canRegenerate, message, onCopy, onRegenerate }: {
   canRegenerate: boolean;
-  executionOverride?: ExecutionResult | null;
-  fieldErrors: Record<string, string>;
   message: AiMessage;
   onCopy: () => void;
   onRegenerate: () => void;
-  onSubmitStructuredForm: (form: AiStructuredForm, values: Record<string, unknown>) => void;
-  structuredFormBusy: boolean;
 }) {
   const { t } = useTranslation();
-  const execution = executionOverride ?? getExecutionResult(message);
+  const execution = getExecutionResult(message);
   const isAssistant = message.role === 'ASSISTANT';
   return (
     <div className={`rounded-xl border p-3 text-sm ${message.role === 'USER' ? 'ms-8 border-primary/20 bg-primary/5 text-slate-900 dark:text-slate-100' : 'me-8 border-slate-200 bg-white text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200'}`}>
       <MarkdownContent content={message.content} />
-      {execution ? (
-        <ResultCard
-          execution={execution}
-          fieldErrors={fieldErrors}
-          messageId={message.id}
-          onSubmitStructuredForm={onSubmitStructuredForm}
-          structuredFormBusy={structuredFormBusy}
-        />
-      ) : null}
+      {execution ? <ResultCard execution={execution} /> : null}
       {isAssistant ? (
         <div className="mt-3 flex justify-end gap-1 border-t border-slate-100 pt-2 dark:border-slate-800">
           <button
@@ -1376,32 +1259,9 @@ function MarkdownList({ content }: { content: string }) {
   );
 }
 
-function ResultCard({
-  execution,
-  fieldErrors,
-  messageId,
-  onSubmitStructuredForm,
-  structuredFormBusy,
-}: {
-  execution: ExecutionResult;
-  fieldErrors: Record<string, string>;
-  messageId: string;
-  onSubmitStructuredForm: (form: AiStructuredForm, values: Record<string, unknown>) => void;
-  structuredFormBusy: boolean;
-}) {
+function ResultCard({ execution }: { execution: ExecutionResult }) {
   const { t } = useTranslation();
   if (execution.type === 'pending_action') return null;
-  if (execution.type === 'structured_form' && execution.form) {
-    return (
-      <AiBusinessForm
-        disabled={structuredFormBusy}
-        fieldErrors={fieldErrors}
-        form={execution.form}
-        onSubmit={(values) => onSubmitStructuredForm(execution.form!, values)}
-        storageKey={`ai-form:${messageId}:${execution.form.toolName}`}
-      />
-    );
-  }
   const result = execution.result;
   if (Array.isArray(result)) {
     if (!result.length) {
@@ -1528,7 +1388,6 @@ function PendingActionCard({ action, disabled, onCancel, onConfirm, onModify }: 
   const preview = normalizePreview(action.previewPayload);
   const title = friendlyActionTitle(action.toolName, preview.title, t);
   const summaryEntries = businessDetailEntries(preview.summary, t, i18n.language, 10);
-  const isExecuting = action.status === 'CONFIRMED';
   return (
     <article className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
       <div className="flex items-start gap-3">
@@ -1537,7 +1396,7 @@ function PendingActionCard({ action, disabled, onCancel, onConfirm, onModify }: 
         </span>
         <div className="min-w-0 flex-1">
           <p className="font-semibold">{title}</p>
-          <p className="mt-1 text-xs opacity-80">{isExecuting ? t('aiAssistant.progress.loading') : (preview.description || t('aiAssistant.requiresConfirmation'))}</p>
+          <p className="mt-1 text-xs opacity-80">{preview.description || t('aiAssistant.requiresConfirmation')}</p>
         </div>
       </div>
       {summaryEntries.length ? (
@@ -1559,8 +1418,8 @@ function PendingActionCard({ action, disabled, onCancel, onConfirm, onModify }: 
           {t('aiAssistant.modify')}
         </button>
         <button className="inline-flex h-8 items-center gap-2 rounded-md bg-primary px-3 text-xs font-semibold text-white transition hover:bg-primary/90 disabled:opacity-60" disabled={disabled} onClick={onConfirm} type="button">
-          {isExecuting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-          {isExecuting ? t('aiAssistant.progress.thinking') : t('common.confirm')}
+          <CheckCircle2 className="h-3.5 w-3.5" />
+          {t('common.confirm')}
         </button>
       </div>
     </article>
@@ -1574,8 +1433,8 @@ function PendingActionEditDialog({ action, disabled, onClose, onSave }: {
   onSave: (input: Record<string, unknown>) => void;
 }) {
   const { t } = useTranslation();
-  const [values, setValues] = useState<Record<string, string>>(() => editableInputForAction(action));
-  const entries = Object.entries(values);
+  const [values, setValues] = useState<Record<string, string>>(() => stringifyEditableInput(action.inputPayload));
+  const entries = Object.entries(values).filter(([key]) => isEditableAiField(key));
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1598,9 +1457,7 @@ function PendingActionEditDialog({ action, disabled, onClose, onSave }: {
           {entries.length ? entries.map(([key, value]) => (
             <label className="block" key={key}>
               <span className="mb-1 block text-xs font-semibold uppercase text-slate-500">{businessFieldLabel(key, t)}</span>
-              {typeof (action.inputPayload && typeof action.inputPayload === 'object' && !Array.isArray(action.inputPayload)
-                ? getValueAtPath(action.inputPayload as Record<string, unknown>, key)
-                : undefined) === 'boolean' ? (
+              {typeof (action.inputPayload as Record<string, unknown>)?.[key] === 'boolean' ? (
                 <select
                   className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none ring-primary/20 transition focus:ring-4 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100"
                   disabled={disabled}
@@ -1610,19 +1467,11 @@ function PendingActionEditDialog({ action, disabled, onClose, onSave }: {
                   <option value="true">{t('common.yes')}</option>
                   <option value="false">{t('common.no')}</option>
                 </select>
-              ) : isStructuredAiField(action.inputPayload, key) ? (
-                <textarea
-                  className="min-h-[120px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none ring-primary/20 transition focus:ring-4 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100"
-                  disabled={disabled}
-                  onChange={(event) => setValues((current) => ({ ...current, [key]: event.target.value }))}
-                  value={value}
-                />
               ) : (
                 <input
                   className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none ring-primary/20 transition focus:ring-4 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100"
                   disabled={disabled}
                   onChange={(event) => setValues((current) => ({ ...current, [key]: event.target.value }))}
-                  type={key === 'periodStart' || key === 'periodEnd' ? 'date' : 'text'}
                   value={value}
                 />
               )}
@@ -1956,32 +1805,13 @@ function isPublicResultField(key: string): boolean {
   return !/(^|_)(id|hash|token|secret|password|cookie|authorization|metadata|payload)$/i.test(key);
 }
 
-const NON_EDITABLE_SEGMENTS = new Set([
-  'id',
-  'userid',
-  'createdbyid',
-  'updatedbyid',
-  'clientid',
-  'customerid',
-  'contractid',
-  'invoiceid',
-  'timesheetid',
-  'timeentryid',
-  'idempotencykey',
-  'permission',
-  'permissions',
-  'scope',
-  'scopes',
-  'audit',
-  'metadata',
-  'token',
-  'secret',
-  'password',
-  'cookie',
-  'authorization',
-  'resultpayload',
-  'previewpayload',
-]);
+function isEditableAiField(key: string): boolean {
+  const normalized = key.toLowerCase();
+  if (['contractid', 'invoiceid', 'clientid', 'customerid', 'timesheetid', 'idempotencykey'].includes(normalized)) {
+    return false;
+  }
+  return isPublicResultField(key);
+}
 
 function humanizeKey(key: string) {
   return key
@@ -1991,39 +1821,12 @@ function humanizeKey(key: string) {
 }
 
 function stringifyEditableInput(input: unknown): Record<string, string> {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
   const output: Record<string, string> = {};
-  flattenEditableInput(input, output);
-  return output;
-}
-
-function editableInputForAction(action: AiPendingAction): Record<string, string> {
-  const output = stringifyEditableInput(action.inputPayload);
-
-  // Contract invoice workflows derive their billing period during preview. Surface
-  // that derived business data in the edit dialog so the user can revise it,
-  // while keeping internal identifiers hidden. The workflow schema already
-  // accepts periodStart/periodEnd and regenerating the action re-runs all
-  // backend validation and invoice calculations.
-  if (action.toolName === 'contract_invoice_workflow') {
-    const preview = normalizePreview(action.previewPayload);
-    const invoicePreview = preview.summary.invoicePreview;
-    if (invoicePreview && typeof invoicePreview === 'object' && !Array.isArray(invoicePreview)) {
-      const billingPeriod = (invoicePreview as Record<string, unknown>).billingPeriod;
-      if (billingPeriod && typeof billingPeriod === 'object' && !Array.isArray(billingPeriod)) {
-        const period = billingPeriod as Record<string, unknown>;
-        if (typeof period.start === 'string') output.periodStart = period.start;
-        if (typeof period.end === 'string') output.periodEnd = period.end;
-      }
-    }
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    if (value == null) output[key] = '';
+    else if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') output[key] = String(value);
   }
-
-  if (
-    ['create_invoice', 'update_invoice', 'create_quote', 'update_quote'].includes(action.toolName) &&
-    !Object.prototype.hasOwnProperty.call(output, 'vatOverrideReason')
-  ) {
-    output.vatOverrideReason = '';
-  }
-
   return output;
 }
 
@@ -2036,90 +1839,17 @@ function parseEditableInput(
     : {};
   const output: Record<string, unknown> = { ...base };
   for (const [key, value] of Object.entries(values)) {
-    const originalValue = getValueAtPath(base, key);
+    const originalValue = base[key];
     if (typeof originalValue === 'number') {
       const numericValue = Number(value);
-      setValueAtPath(output, key, Number.isFinite(numericValue) ? numericValue : value);
+      output[key] = Number.isFinite(numericValue) ? numericValue : value;
     } else if (typeof originalValue === 'boolean') {
-      setValueAtPath(output, key, value === 'true');
-    } else if (Array.isArray(originalValue) || (originalValue && typeof originalValue === 'object')) {
-      try {
-        setValueAtPath(output, key, value.trim() ? JSON.parse(value) : Array.isArray(originalValue) ? [] : null);
-      } catch {
-        setValueAtPath(output, key, originalValue);
-      }
+      output[key] = value === 'true';
     } else if (value === '') {
-      setValueAtPath(output, key, null);
+      output[key] = null;
     } else {
-      setValueAtPath(output, key, value);
+      output[key] = value;
     }
   }
   return output;
-}
-
-function flattenEditableInput(input: unknown, output: Record<string, string>, parentPath = '') {
-  if (!input || typeof input !== 'object') return;
-  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
-    const path = parentPath ? `${parentPath}.${key}` : key;
-    if (!isEditableAiFieldPath(path)) continue;
-    if (value == null) {
-      output[path] = '';
-      continue;
-    }
-    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-      output[path] = String(value);
-      continue;
-    }
-    output[path] = JSON.stringify(value, null, 2);
-  }
-}
-
-function isEditableAiFieldPath(path: string): boolean {
-  const segments = path.split('.').map((segment) => segment.toLowerCase());
-  if (segments.some((segment) => NON_EDITABLE_SEGMENTS.has(segment))) return false;
-  return isPublicResultField(path);
-}
-
-function getValueAtPath(source: Record<string, unknown>, path: string): unknown {
-  return path.split('.').reduce<unknown>((current, segment) => {
-    if (!current || typeof current !== 'object' || Array.isArray(current)) return undefined;
-    return (current as Record<string, unknown>)[segment];
-  }, source);
-}
-
-function setValueAtPath(target: Record<string, unknown>, path: string, value: unknown) {
-  const segments = path.split('.');
-  const last = segments.pop();
-  if (!last) return;
-  let current: Record<string, unknown> = target;
-  for (const segment of segments) {
-    const next = current[segment];
-    if (!next || typeof next !== 'object' || Array.isArray(next)) {
-      current[segment] = {};
-    }
-    current = current[segment] as Record<string, unknown>;
-  }
-  current[last] = value;
-}
-
-function isStructuredAiField(input: unknown, path: string): boolean {
-  const value = input && typeof input === 'object' && !Array.isArray(input)
-    ? getValueAtPath(input as Record<string, unknown>, path)
-    : undefined;
-  return Array.isArray(value) || Boolean(value && typeof value === 'object');
-}
-
-function extractAiFieldErrors(error: unknown) {
-  const payload = error && typeof error === 'object' && 'response' in error
-    ? (error as { response?: { data?: { errors?: string[] } } }).response?.data
-    : undefined;
-  const issues = Array.isArray(payload?.errors) ? payload.errors : [];
-  return issues.reduce<Record<string, string>>((accumulator, issue) => {
-    const separatorIndex = issue.indexOf(':');
-    if (separatorIndex <= 0) return accumulator;
-    const path = issue.slice(0, separatorIndex).trim();
-    const message = issue.slice(separatorIndex + 1).trim();
-    if (path) accumulator[path] = message || issue;
-    return accumulator;
-  }, {});
 }

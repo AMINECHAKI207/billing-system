@@ -42,7 +42,9 @@ export const aiToolExecutionSchema = z.object({
     toolName: z.string().trim().min(2).max(120),
     input: z.record(z.unknown()).default({}),
     conversationId: uuid.optional(),
+    language: language.optional(),
     idempotencyKey: z.string().trim().min(8).max(160).optional(),
+    replaceActionId: uuid.optional(),
   }),
 });
 

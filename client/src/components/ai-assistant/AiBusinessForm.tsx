@@ -179,7 +179,7 @@ function BusinessFieldRenderer({
   return (
     <label className="block space-y-1">
       <FieldLabel field={field} />
-      {renderInput(field, value, commonClassName, disabled, onChange)}
+      {renderInput(field, value, commonClassName, disabled, onChange, t('common.yes'), t('common.no'))}
       {error ? <p className="text-xs text-rose-600 dark:text-rose-300">{error}</p> : null}
     </label>
   );
@@ -328,7 +328,9 @@ function renderInput(
   value: unknown,
   className: string,
   disabled: boolean,
-  onChange: (value: unknown) => void
+  onChange: (value: unknown) => void,
+  yesLabel: string,
+  noLabel: string
 ) {
   switch (field.type) {
     case 'textarea':
@@ -382,8 +384,8 @@ function renderInput(
           onChange={(event) => onChange(event.target.value === 'true')}
           value={value === true ? 'true' : 'false'}
         >
-          <option value="true">Oui</option>
-          <option value="false">Non</option>
+          <option value="true">{yesLabel}</option>
+          <option value="false">{noLabel}</option>
         </select>
       );
     case 'select':
@@ -437,7 +439,7 @@ function getValueAtPath(source: Record<string, unknown>, path: string): unknown 
   }, source);
 }
 
-function setValueAtPath(source: Record<string, unknown>, path: string, value: unknown): Record<string, unknown> {
+function setValueAtPath(source: Record<string, unknown>, path: string, value: unknown): Record<string, unknown> { // i18n-scan-ignore-line
   const clone = structuredClone(source);
   const segments = path.split('.');
   const last = segments.pop();

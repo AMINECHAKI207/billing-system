@@ -4033,12 +4033,12 @@ const [telegramLinkExpiresAt, setTelegramLinkExpiresAt] = useState("");
               </div>
               <div className="rounded-lg border border-slate-200 bg-white p-4">
   <div className="flex flex-col gap-4">
-    <div>
+      <div>
       <h3 className="text-sm font-semibold text-slate-900">
-        Telegram Integration
+        {t("telegram.settings.title")}
       </h3>
       <p className="mt-1 text-xs text-slate-500">
-        Connect your ERP account to Telegram to securely access the AI Assistant.
+        {t("telegram.settings.description")}
       </p>
     </div>
 
@@ -4050,14 +4050,14 @@ const [telegramLinkExpiresAt, setTelegramLinkExpiresAt] = useState("");
         className="inline-flex w-fit items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
       >
         {telegramLinkMutation.isPending
-          ? "Generating..."
-          : "Connect Telegram"}
+          ? t("telegram.settings.generating")
+          : t("telegram.settings.connect")}
       </button>
     ) : (
       <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
         <div>
           <p className="text-xs font-medium text-slate-500">
-            Your secure linking code
+            {t("telegram.settings.secureCode")}
           </p>
 
           <p className="mt-1 font-mono text-xl font-bold tracking-wider text-slate-900">
@@ -4066,12 +4066,12 @@ const [telegramLinkExpiresAt, setTelegramLinkExpiresAt] = useState("");
         </div>
 
         <p className="text-xs text-slate-500">
-          Valid for 15 minutes.
+          {t("telegram.settings.validity")}
         </p>
 
         <div>
           <p className="text-xs text-slate-500">
-            Send this command to the Telegram bot:
+            {t("telegram.settings.sendCommand")}
           </p>
 
           <code className="mt-1 block rounded-md bg-slate-900 px-3 py-2 text-sm text-white">
@@ -4086,12 +4086,12 @@ const [telegramLinkExpiresAt, setTelegramLinkExpiresAt] = useState("");
           }
           className="inline-flex w-fit items-center justify-center rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
         >
-          Copy command
+          {t("telegram.settings.copyCommand")}
         </button>
 
         {telegramLinkExpiresAt && (
           <p className="text-xs text-slate-400">
-            Expires at:{" "}
+            {t("telegram.settings.expiresAt")}{" "}
             {new Date(telegramLinkExpiresAt).toLocaleTimeString()}
           </p>
         )}

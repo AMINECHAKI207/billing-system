@@ -1,5 +1,6 @@
 import { ApiError } from '@utils/ApiError';
 import { logger } from '@config/logger';
+import { sendEmail } from '@services/email.service';
 import { generateDevisNumber } from '@utils/devisNumber';
 import { parsePagination, parseSort } from '@utils/pagination';
 import { DevisStatus, PermissionScope, Prisma, Role } from '@prisma/client';
@@ -7,6 +8,7 @@ import { settingsService } from '@modules/settings/settings.service';
 import { rbacService } from '@modules/rbac/rbac.service';
 import { customerAccessWhere, devisAccessWhere } from '@modules/rbac/accessScope';
 import { getCountryName, isValidCountryCode, normalizeCountryCode } from '@utils/countries';
+import { renderDevisPdfBuffer } from './devis.pdf';
 import { CreateDevisInput, DevisQueryInput, UpdateDevisInput } from './devis.schema';
 import { devisRepository } from './devis.repository';
 
@@ -293,6 +295,89 @@ export class DevisService {
     return result;
   }
 
+  async sendDevisEmail(
+    id: string,
+    userId: string,
+    scope: PermissionScope,
+    data: {
+      recipientEmail?: string | null;
+      subject?: string | null;
+      message?: string | null;
+      pdfLanguage?: 'fr' | 'en' | 'ar' | null;
+    }
+  ) {
+    const devis = await this.getDevisById(id, userId, scope);
+
+    if (devis.status === DevisStatus.REJECTED) {
+      throw ApiError.badRequest('Cannot email a rejected quote');
+    }
+
+    const company = await settingsService.getCompanySettings();
+    const recipientEmail = data.recipientEmail?.trim() || devis.customer.email?.trim();
+    if (!recipientEmail) {
+      throw ApiError.badRequest('Recipient email is required.');
+    }
+
+    const subject = sanitizeEmailSubject(data.subject?.trim() || `Devis ${devis.devisNumber}`);
+    const text = sanitizeEmailText(
+      data.message?.trim()
+      || [
+        `Bonjour ${devis.customer.name},`,
+        '',
+        `Veuillez trouver ci-joint le devis ${devis.devisNumber}.`,
+        `Montant total: ${formatDevisEmailCurrency(Number(devis.total), devis.currency)}.`,
+        `Valable jusqu'au: ${formatDevisEmailDate(devis.validUntil)}.`,
+        '',
+        'Cordialement,',
+        company.name,
+      ].join('\n')
+    );
+    const pdf = await renderDevisPdfBuffer(devis, company);
+
+    try {
+      const delivery = await sendEmail({
+        to: recipientEmail,
+        subject,
+        text,
+        attachments: [
+          {
+            filename: `${safeDevisFileName(devis.devisNumber)}.pdf`,
+            content: pdf,
+            contentType: 'application/pdf',
+          },
+        ],
+      });
+
+      const updatedDevis =
+        devis.status === DevisStatus.DRAFT
+          ? await devisRepository.updateStatus(id, DevisStatus.SENT)
+          : devis;
+
+      logger.info('Devis email sent', {
+        devisId: devis.id,
+        devisNumber: devis.devisNumber,
+        userId,
+        recipientEmail,
+        deliveryMode: delivery.mode,
+      });
+
+      return {
+        devis: updatedDevis,
+        email: { to: recipientEmail, subject },
+        delivery,
+      };
+    } catch (error) {
+      logger.error('Failed to send devis email', {
+        devisId: devis.id,
+        devisNumber: devis.devisNumber,
+        userId,
+        recipientEmail,
+        error: error instanceof Error ? error.message : 'Unknown email error',
+      });
+      throw error;
+    }
+  }
+
   private async resolveDevisVat(
     customer: Awaited<ReturnType<typeof devisRepository.findCustomerById>>,
     data: CreateDevisInput | UpdateDevisInput,
@@ -405,3 +490,36 @@ function normalizeCatalogValue(value: string) {
 }
 
 export const devisService = new DevisService();
+
+function safeDevisFileName(value: string) {
+  return value.replace(/[^a-z0-9_.-]+/gi, '-').replace(/^-+|-+$/g, '');
+}
+
+function sanitizeEmailText(value: string) {
+  return value.replace(/\0/g, '').trim();
+}
+
+function sanitizeEmailSubject(value: string) {
+  return sanitizeEmailText(value).replace(/[\r\n]+/g, ' ').slice(0, 255);
+}
+
+function formatDevisEmailCurrency(amount: number, currency: string) {
+  try {
+    return new Intl.NumberFormat('fr-FR', {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    return `${amount.toFixed(2)} ${currency}`;
+  }
+}
+
+function formatDevisEmailDate(date: Date) {
+  return new Intl.DateTimeFormat('fr-FR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(date);
+}

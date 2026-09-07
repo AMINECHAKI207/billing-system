@@ -8,6 +8,10 @@ const localeDirArgIndex = process.argv.indexOf('--locale-dir');
 const localeDir = localeDirArgIndex >= 0
   ? path.resolve(rootDir, process.argv[localeDirArgIndex + 1])
   : path.resolve(rootDir, 'src', 'i18n', 'locales');
+const telegramFileArgIndex = process.argv.indexOf('--telegram-file');
+const telegramFilePath = telegramFileArgIndex >= 0
+  ? path.resolve(rootDir, process.argv[telegramFileArgIndex + 1])
+  : path.resolve(rootDir, '..', 'server', 'src', 'modules', 'telegram', 'telegram.service.ts');
 const skipIndexCheck = process.argv.includes('--skip-index');
 const languages = ['en', 'fr', 'ar'];
 const requiredStatusNamespaces = [
@@ -79,6 +83,7 @@ for (const language of languages) {
 }
 
 if (!skipIndexCheck) validateIndexHtml();
+validateTelegramModuleEncoding();
 
 if (failures.length) {
   console.error(`i18n audit failed with ${failures.length} issue(s):`);
@@ -106,6 +111,23 @@ function validateIndexHtml() {
   if (!/<meta\s+charset=["']?UTF-8["']?\s*\/?>/i.test(source)) {
     failures.push('index.html: missing UTF-8 charset meta tag');
   }
+}
+
+function validateTelegramModuleEncoding() {
+  if (!fs.existsSync(telegramFilePath)) return;
+  const label = path.relative(rootDir, telegramFilePath).replace(/\\/g, '/');
+  const source = readUtf8File(telegramFilePath, label);
+  if (!source) return;
+
+  const mojibakePattern = /(Ã|Â|â€™|â€œ|â€|ðŸ|ï¸|�|\?{4,})/g;
+  const lines = source.split(/\r?\n/);
+
+  lines.forEach((line, index) => {
+    const matches = line.match(mojibakePattern);
+    if (!matches) return;
+    const uniqueMatches = [...new Set(matches)];
+    failures.push(`${label}:${index + 1}: suspicious mojibake token(s) ${uniqueMatches.join(', ')}`);
+  });
 }
 
 function validateKey(language, key) {

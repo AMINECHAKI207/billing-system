@@ -21,6 +21,7 @@
     "test:contract-timesheets": "ts-node --project tsconfig.json --files -r tsconfig-paths/register src/tests/contractTimesheetsWorkflow.test.ts",
     "test:contract-timesheets-demo": "ts-node --project tsconfig.json --files -r tsconfig-paths/register src/tests/contractTimesheetsDemoWorkflow.test.ts",
     "test:ai-assistant": "ts-node --project tsconfig.json --files -r tsconfig-paths/register src/tests/aiAssistantWorkflow.test.ts",
+    "test:telegram": "ts-node --project tsconfig.json --files -r tsconfig-paths/register src/tests/telegramIntegration.test.ts",
     "test:audit": "ts-node --project tsconfig.json --files -r tsconfig-paths/register src/tests/enterpriseAuditLog.test.ts",
     "test:devis": "ts-node --project tsconfig.json --files -r tsconfig-paths/register src/tests/devisWorkflow.test.ts",
     "test:dashboard": "ts-node --project tsconfig.json --files -r tsconfig-paths/register src/tests/dashboardStats.test.ts",

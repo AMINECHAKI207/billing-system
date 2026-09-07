@@ -21,7 +21,7 @@ const optionalDate = z.string().refine((value) => !Number.isNaN(Date.parse(value
 const optionalDateTime = z.string().datetime().optional().nullable();
 
 const searchInput = z.object({
-  query: z.string().trim().min(1).max(160),
+  query: z.string().trim().max(160).default(''),
   limit,
 }).strict();
 

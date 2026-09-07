@@ -41,6 +41,21 @@ export function renderDevisPdf(
   doc.end();
 }
 
+export function renderDevisPdfBuffer(
+  devis: DevisWithPdfRelations,
+  company: CompanySettings
+): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    const doc = new PDFDocument({ bufferPages: true, compress: false, margin: 42, size: 'A4' });
+    doc.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+    drawDevisPdf(doc, devis, company);
+    doc.end();
+  });
+}
+
 function drawDevisPdf(doc: PDFKit.PDFDocument, devis: DevisWithPdfRelations, company: CompanySettings) {
   doc.info.Title = `Devis ${devis.devisNumber}`;
   doc.info.Author = company.name;

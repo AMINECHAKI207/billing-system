@@ -78,6 +78,8 @@ type AssistantContextReference = {
   contractReference?: string;
   invoiceId?: string;
   invoiceReference?: string;
+  quoteId?: string;
+  quoteReference?: string;
   clientId?: string;
   clientReference?: string;
   source: 'page' | 'conversation';
@@ -137,6 +139,38 @@ export class AiAssistantService {
         requiredPermission: tool.requiredPermission,
         additionalPermissions: tool.additionalPermissions ?? [],
       }));
+  }
+
+  async previewMessagePlan(user: AssistantUser, conversationId: string, input: AiMessageInput) {
+    const plan = await this.planResponse(user, conversationId, input);
+    const tool = plan.toolCall?.name ? this.tools.get(plan.toolCall.name) ?? null : null;
+    return {
+      intent: plan.intent ?? null,
+      toolName: plan.toolCall?.name ?? null,
+      toolInput: plan.toolCall?.input ?? null,
+      semanticIntent: plan.semanticIntent ?? null,
+      isWrite:
+        plan.semanticIntent?.isWrite
+        ?? (tool ? tool.riskLevel !== AiToolRiskLevel.READ_ONLY : false),
+    };
+  }
+
+  async previewStructuredFormContinuation(
+    input: {
+      currentValues: Record<string, unknown>;
+      missingFields: string[];
+      fields: unknown[];
+      message: string;
+      language: "fr" | "en" | "ar";
+    }
+  ) {
+    const extracted = await this.extractStructuredFormValues(input);
+    const matchedMissingFields = this.matchStructuredFormFields(extracted, input.missingFields);
+    return {
+      extracted,
+      matchedMissingFields,
+      hasMeaningfulValues: matchedMissingFields.length > 0,
+    };
   }
 
   async briefing(user: AssistantUser) {
@@ -766,6 +800,45 @@ export class AiAssistantService {
     return updated;
   }
 
+  async reopenPendingActionForm(
+    user: AssistantUser,
+    actionId: string,
+    language?: 'fr' | 'en' | 'ar'
+  ) {
+    const action = await prisma.aiPendingAction.findFirst({ where: { id: actionId, userId: user.id } });
+    if (!action) throw ApiError.notFound('AI pending action');
+    if (action.status !== AiActionStatus.PENDING) {
+      throw ApiError.conflict('This AI action is no longer pending');
+    }
+
+    const tool = this.tools.get(action.toolName);
+    if (!tool) throw ApiError.badRequest('AI tool is no longer available');
+    if (!tool.form) throw ApiError.badRequest('This AI action cannot be edited');
+    await this.assertCanUseTool(user, tool);
+
+    const resolvedLanguage =
+      language
+      ?? (await this.resolveExecutionLanguage(user, {
+        toolName: tool.name,
+        input: this.asRecord(action.inputPayload) ?? {},
+        conversationId: action.conversationId,
+      }));
+    const context: ToolContext = { user };
+    const rawInput = this.asRecord(action.inputPayload) ?? {};
+    const defaults = tool.form.buildInitialValue
+      ? await tool.form.buildInitialValue(rawInput, context)
+      : this.defaultFormValues(tool.form.fields);
+    const normalized = this.normalizeStructuredFormDraft(tool.form.fields, this.deepMerge(defaults, rawInput));
+    const missingFields = this.collectMissingRequiredFields(tool.form.fields, normalized);
+
+    return {
+      type: 'structured_form' as const,
+      toolName: tool.name,
+      form: await this.serializeStructuredForm(tool.name, tool.form, normalized, missingFields, context, resolvedLanguage),
+      replaceActionId: action.id,
+    };
+  }
+
   private async waitForExecutedAction(actionId: string, userId: string) {
     for (let attempt = 0; attempt < 20; attempt += 1) {
       const action = await prisma.aiPendingAction.findFirst({ where: { id: actionId, userId } });
@@ -812,10 +885,12 @@ export class AiAssistantService {
   }
 
   private async planResponse(user: AssistantUser, conversationId: string, input: AiMessageInput): Promise<AssistantPlan> {
-    const blocked = this.detectUnsafeRequest(input.content, input.language);
+    const routingContent = this.normalizeBusinessReferenceMentions(input.content);
+    const routedInput = routingContent === input.content ? input : { ...input, content: routingContent };
+    const blocked = this.detectUnsafeRequest(routedInput.content, routedInput.language);
     if (blocked) return blocked;
 
-    const normalized = this.normalizeIntentText(input.content);
+    const normalized = this.normalizeIntentText(routedInput.content);
     const explicitInvoiceRequest = this.matchesAny(normalized, [
       'cree une facture',
       'creer une facture',
@@ -830,17 +905,17 @@ export class AiAssistantService {
       'invoice this contract',
       'bill this contract',
     ]);
-    const explicitInvoiceTarget = explicitInvoiceRequest ? this.extractBusinessEntityQuery(input.content) : null;
+    const explicitInvoiceTarget = explicitInvoiceRequest ? this.extractBusinessEntityQuery(routedInput.content) : null;
     const explicitContractInvoiceRequest = explicitInvoiceRequest
-      && this.isExplicitContractInvoiceRequest(normalized, input.content, input.context);
-    if (input.context?.entityType === 'contract' && input.context.entityId && explicitContractInvoiceRequest) {
+      && this.isExplicitContractInvoiceRequest(normalized, routedInput.content, routedInput.context);
+    if (routedInput.context?.entityType === 'contract' && routedInput.context.entityId && explicitContractInvoiceRequest) {
       const blockedContractPlan = await this.validateContractInvoiceIntent(
         user,
-        input.language,
-        input.context.entityId,
-        input.context.readableReference,
+        routedInput.language,
+        routedInput.context.entityId,
+        routedInput.context.readableReference,
         true,
-        { contractId: input.context.entityId }
+        { contractId: routedInput.context.entityId }
       );
       if (blockedContractPlan) {
         return blockedContractPlan;
@@ -858,7 +933,7 @@ export class AiAssistantService {
         );
         if (blockedContractPlan) return blockedContractPlan;
         return {
-          response: this.localized(input.language, {
+          response: this.localized(routedInput.language, {
             fr: `J ai trouve le contrat ${contract.contractNumber ?? ''}. Je prepare la facture a confirmer.`,
             en: `I found contract ${contract.contractNumber ?? ''}. I am preparing the invoice for confirmation.`,
             ar: `عثرت على العقد ${contract.contractNumber ?? ''}. سأحضر الفاتورة للتأكيد.`,
@@ -871,7 +946,7 @@ export class AiAssistantService {
       const fuzzyContract = await this.resolveInvoiceableContractFromSearch(user, input.language, explicitInvoiceTarget);
       if (fuzzyContract) {
         return {
-          response: this.localized(input.language, {
+          response: this.localized(routedInput.language, {
             fr: `J ai rapproche votre demande du contrat ${fuzzyContract.contractNumber ?? ''} pour ${fuzzyContract.clientName ?? explicitInvoiceTarget}. Je prepare la facture a confirmer.`,
             en: `I matched your request to contract ${fuzzyContract.contractNumber ?? ''} for ${fuzzyContract.clientName ?? explicitInvoiceTarget}. I am preparing the invoice for confirmation.`,
             ar: `طابقت طلبك مع العقد ${fuzzyContract.contractNumber ?? ''} الخاص بالعميل ${fuzzyContract.clientName ?? explicitInvoiceTarget}. سأحضر الفاتورة للتأكيد.`,
@@ -883,10 +958,10 @@ export class AiAssistantService {
 
       const client = await this.resolveSingleClient(user, explicitInvoiceTarget);
       if (client) {
-        const clientContract = await this.resolveInvoiceableContractForClient(user, input.language, client.id);
+        const clientContract = await this.resolveInvoiceableContractForClient(user, routedInput.language, client.id);
         if (clientContract) {
           return {
-            response: this.localized(input.language, {
+            response: this.localized(routedInput.language, {
               fr: `J ai retrouve le client ${client.name ?? explicitInvoiceTarget} et le contrat ${clientContract.contractNumber ?? ''}. Je prepare la facture a confirmer.`,
               en: `I found customer ${client.name ?? explicitInvoiceTarget} and contract ${clientContract.contractNumber ?? ''}. I am preparing the invoice for confirmation.`,
               ar: `عثرت على العميل ${client.name ?? explicitInvoiceTarget} وعلى العقد ${clientContract.contractNumber ?? ''}. سأحضر الفاتورة للتأكيد.`,
@@ -898,10 +973,10 @@ export class AiAssistantService {
       }
     }
 
-    const directTool = this.parseDirectTool(input.content);
+    const directTool = this.parseDirectTool(routedInput.content);
     if (directTool) {
       return {
-        response: this.localized(input.language, {
+        response: this.localized(routedInput.language, {
           fr: 'Action preparee. Verifiez le resume avant confirmation.',
           en: 'Action prepared. Review the preview before confirming.',
           ar: 'تم تحضير الإجراء. راجع الملخص قبل التأكيد.',
@@ -911,13 +986,16 @@ export class AiAssistantService {
       };
     }
 
+    const deterministicReadPlan = await this.resolveDeterministicReadPlan(user, conversationId, routedInput, normalized);
+    if (deterministicReadPlan) return deterministicReadPlan;
+
     // Semantic classification is the PRIMARY, authoritative router: it understands
     // paraphrases and multilingual natural language, then maps the request to an
     // existing tool. Keyword/regex routing below only runs as a non-authoritative
     // fallback when semantic classification is unavailable (no API key configured,
     // network/provider failure, or a malformed/unusable model response).
-    const fallback = await this.keywordFallbackPlan(user, conversationId, input.content, input.language, input.context);
-    const semanticPlan = await this.classifySemanticIntent(user, conversationId, input).catch(() => null);
+    const fallback = await this.keywordFallbackPlan(user, conversationId, routedInput.content, routedInput.language, routedInput.context);
+    const semanticPlan = await this.classifySemanticIntent(user, conversationId, routedInput).catch(() => null);
     const strategicFallbackIntents = new Set([
       'invoice_recommendations',
       'overdue_invoices',
@@ -934,7 +1012,24 @@ export class AiAssistantService {
       'contract_no_ready_entries',
       'contract_invoice_prerequisite_missing',
     ]);
+    const writeFormFallbackIntents = new Set([
+      'create_customer_form',
+      'create_invoice_form',
+      'create_quote_form',
+      'create_contract_form',
+      'create_expense_form',
+      'create_product_form',
+      'create_timesheet_form',
+      'record_invoice_payment_form',
+      'create_credit_note_form',
+      'create_recurring_plan_form',
+      'create_reminder_form',
+      'create_user_form',
+      'create_role_form',
+    ]);
     const semanticIsWrite = Boolean(semanticPlan?.semanticIntent?.isWrite);
+    const semanticTool = semanticPlan?.toolCall ? this.tools.get(semanticPlan.toolCall.name) ?? null : null;
+    const fallbackTool = fallback?.toolCall ? this.tools.get(fallback.toolCall.name) ?? null : null;
     if (
       semanticPlan?.toolCall
       && fallback?.toolCall
@@ -946,6 +1041,15 @@ export class AiAssistantService {
           && !semanticIsWrite
         )
       )
+    ) {
+      return fallback;
+    }
+    if (
+      semanticPlan?.toolCall
+      && fallback?.toolCall
+      && semanticTool?.riskLevel === AiToolRiskLevel.READ_ONLY
+      && fallbackTool?.riskLevel !== AiToolRiskLevel.READ_ONLY
+      && writeFormFallbackIntents.has(fallback.intent ?? '')
     ) {
       return fallback;
     }
@@ -965,6 +1069,161 @@ export class AiAssistantService {
       }),
       intent: 'fallback_help',
     };
+  }
+
+  private async resolveDeterministicReadPlan(
+    user: AssistantUser,
+    _conversationId: string,
+    input: AiMessageInput,
+    normalized: string,
+  ): Promise<AssistantPlan | null> {
+    const hasPdfOrEmailIntent = this.matchesAny(normalized, ['pdf', 'telecharge', 'download', 'email', 'mail', 'envoyer', 'send']);
+    if (hasPdfOrEmailIntent) return null;
+    const detailReadIntent = this.matchesAny(normalized, [
+      'show',
+      'view',
+      'display',
+      'open',
+      'lookup',
+      'details',
+      'detail',
+      'voir',
+      'affiche',
+      'montre',
+      'consulte',
+      'recherche',
+      'search',
+    ]);
+
+    const invoiceNumber = this.extractBusinessReference(input.content, 'INV');
+    const contractNumber = this.extractBusinessReference(input.content, 'CTR');
+    const quoteNumber = this.extractBusinessReference(input.content, 'DEV');
+
+    if (invoiceNumber && detailReadIntent) {
+      const invoice = await this.resolveSingleInvoice(user, invoiceNumber);
+      if (!invoice) {
+        return {
+          response: this.localized(input.language, {
+            fr: `Je n ai trouve aucune facture correspondant a ${invoiceNumber}.`,
+            en: `I could not find an invoice matching ${invoiceNumber}.`,
+            ar: `لم أجد فاتورة تطابق ${invoiceNumber}.`,
+          }),
+          intent: 'invoice_not_found',
+        };
+      }
+      return {
+        response: this.localized(input.language, {
+          fr: `Je consulte la facture ${invoice.invoiceNumber ?? invoiceNumber}.`,
+          en: `I am showing invoice ${invoice.invoiceNumber ?? invoiceNumber}.`,
+          ar: `سأعرض الفاتورة ${invoice.invoiceNumber ?? invoiceNumber}.`,
+        }),
+        intent: 'get_invoice_details',
+        toolCall: { name: 'get_invoice_details', input: { invoiceId: invoice.id } },
+      };
+    }
+
+    if (contractNumber && detailReadIntent) {
+      const contract = await this.resolveSingleContract(user, contractNumber);
+      if (!contract) {
+        return {
+          response: this.localized(input.language, {
+            fr: `Je n ai trouve aucun contrat correspondant a ${contractNumber}.`,
+            en: `I could not find a contract matching ${contractNumber}.`,
+            ar: `لم أجد عقدا يطابق ${contractNumber}.`,
+          }),
+          intent: 'contract_not_found',
+        };
+      }
+      return {
+        response: this.localized(input.language, {
+          fr: `Je consulte le contrat ${contract.contractNumber ?? contractNumber}.`,
+          en: `I am showing contract ${contract.contractNumber ?? contractNumber}.`,
+          ar: `سأعرض العقد ${contract.contractNumber ?? contractNumber}.`,
+        }),
+        intent: 'get_contract_details',
+        toolCall: { name: 'get_contract_details', input: { contractId: contract.id } },
+      };
+    }
+
+    if (quoteNumber && detailReadIntent) {
+      const quote = await this.resolveSingleQuote(user, quoteNumber);
+      if (!quote) {
+        return {
+          response: this.localized(input.language, {
+            fr: `Je n ai trouve aucun devis correspondant a ${quoteNumber}.`,
+            en: `I could not find a quote matching ${quoteNumber}.`,
+            ar: `لم أجد عرض سعر يطابق ${quoteNumber}.`,
+          }),
+          intent: 'quote_not_found',
+        };
+      }
+      return {
+        response: this.localized(input.language, {
+          fr: `Je consulte le devis ${quote.devisNumber ?? quoteNumber}.`,
+          en: `I am showing quote ${quote.devisNumber ?? quoteNumber}.`,
+          ar: `سأعرض عرض السعر ${quote.devisNumber ?? quoteNumber}.`,
+        }),
+        intent: 'get_quote_details',
+        toolCall: { name: 'get_quote_details', input: { id: quote.id } },
+      };
+    }
+
+    const isListVerb = this.matchesAny(normalized, [
+      'show',
+      'list',
+      'display',
+      'view',
+      'see',
+      'affiche',
+      'montre',
+      'liste',
+      'voir',
+      'consulte',
+      'cherche',
+      'search',
+    ]);
+    if (!isListVerb) return null;
+
+    const listExclusions = ['overdue', 'impay', 'unpaid', 'retard', 'risk', 'risque', 'expir', 'consommation', 'budget', 'timesheet', 'feuille', 'pdf', 'mail', 'email'];
+    if (this.matchesAny(normalized, listExclusions)) return null;
+
+    if (this.matchesAny(normalized, ['my contracts', 'mes contrats', 'show contracts', 'show contract list', 'list contracts', 'affiche les contrats', 'montre les contrats', 'voir les contrats'])) {
+      return {
+        response: this.localized(input.language, {
+          fr: 'Je consulte les contrats accessibles selon vos permissions.',
+          en: 'I am listing the contracts available under your permissions.',
+          ar: 'سأعرض العقود المتاحة حسب صلاحياتك.',
+        }),
+        intent: 'search_contracts',
+        toolCall: { name: 'search_contracts', input: { query: '', limit: 5 } },
+      };
+    }
+
+    if (this.matchesAny(normalized, ['my invoices', 'mes factures', 'show invoices', 'list invoices', 'affiche les factures', 'montre les factures', 'voir les factures'])) {
+      return {
+        response: this.localized(input.language, {
+          fr: 'Je consulte la liste des factures accessibles selon vos permissions.',
+          en: 'I am listing invoices available under your permissions.',
+          ar: 'سأعرض قائمة الفواتير المتاحة حسب صلاحياتك.',
+        }),
+        intent: 'search_invoices',
+        toolCall: { name: 'search_invoices', input: { search: '', limit: '5', page: '1' } },
+      };
+    }
+
+    if (this.matchesAny(normalized, ['my quotes', 'mes devis', 'show quotes', 'show devis', 'list quotes', 'list devis', 'affiche les devis', 'montre les devis', 'voir les devis'])) {
+      return {
+        response: this.localized(input.language, {
+          fr: 'Je consulte les devis accessibles selon vos permissions.',
+          en: 'I am listing quotes available under your permissions.',
+          ar: 'سأعرض عروض الأسعار المتاحة حسب صلاحياتك.',
+        }),
+        intent: 'search_quotes',
+        toolCall: { name: 'search_quotes', input: { search: '', limit: '5', page: '1' } },
+      };
+    }
+
+    return null;
   }
 
   private detectUnsafeRequest(content: string, language: string): AssistantPlan | null {
@@ -1023,12 +1282,14 @@ export class AiAssistantService {
    */
   private async keywordFallbackPlan(user: AssistantUser, conversationId: string, content: string, language: string, pageContext?: AiMessageInput['context']): Promise<AssistantPlan | null> {
     const normalized = this.normalizeIntentText(content);
-    const contractNumber = content.match(/CTR-\d{4}-\d{4}/i)?.[0];
-    const invoiceNumber = content.match(/INV-\d{4}-\d{4}/i)?.[0];
+    const contractNumber = this.extractBusinessReference(content, 'CTR');
+    const invoiceNumber = this.extractBusinessReference(content, 'INV');
+    const quoteNumber = this.extractBusinessReference(content, 'DEV');
     const routedIntent = this.detectAssistantIntent(normalized);
     const contextReference = await this.resolveContextReference(user, conversationId, pageContext);
     const contextContractId = contextReference.contractId;
     const contextInvoiceId = contextReference.invoiceId;
+    const contextQuoteId = contextReference.quoteId;
     const consumptionIntent = this.matchesAny(normalized, ['consommation', 'budget', 'reste', 'remaining', 'consumption', 'ch7al', 'ba9i']);
     const timesheetIntent = this.matchesAny(normalized, ['timesheet', 'timesheets', 'feuille', 'feuilles', 'temps', 'time']);
     const invoiceIntent = this.matchesAny(normalized, ['facture', 'invoice', 'prepare', 'apercu', 'preview', 'genere', 'generate']);
@@ -1050,8 +1311,14 @@ export class AiAssistantService {
       en: 'the current invoice',
       ar: 'الفاتورة الحالية',
     });
+    const contextQuoteLabel = contextReference.quoteReference ?? this.localized(language, {
+      fr: 'le devis courant',
+      en: 'the current quote',
+      ar: 'عرض السعر الحالي',
+    });
     const refersToCurrentContract = Boolean(contextContractId) && this.matchesAny(normalized, ['ce contrat', 'this contract', 'had contrat', 'هذا العقد']);
     const refersToCurrentInvoice = Boolean(contextInvoiceId) && this.matchesAny(normalized, ['cette facture', 'this invoice', 'had facture', 'هذه الفاتورة']);
+    const refersToCurrentQuote = Boolean(contextQuoteId) && this.matchesAny(normalized, ['ce devis', 'this quote', 'had devis', 'عرض السعر هذا']);
     if (routedIntent.length > 0 && routedIntent[0]!.confidence < 0.7) {
       return {
         response: this.localized(language, {
@@ -1074,8 +1341,8 @@ export class AiAssistantService {
             ? `I prepared the draft for customer ${customerDraft.name}. Complete the remaining fields in the form to generate the preview.`
             : 'I understood the customer creation request. Complete the structured form to prepare the preview.',
           ar: customerDraft.name
-            ? `?? ????? ????? ?????? ${customerDraft.name}. ???? ?????? ???????? ?? ??????? ?????? ????????.`
-            : '???? ??? ????? ????. ???? ??????? ?????? ?????? ????????.',
+            ? `لقد أعددت مسودة العميل ${customerDraft.name}. أكمل الحقول المتبقية في النموذج لإنشاء المعاينة.`
+            : 'فهمت طلب إنشاء عميل. أكمل النموذج المنظم لتحضير المعاينة.',
         }),
         intent: 'create_customer_form',
         toolCall: {
@@ -1097,7 +1364,7 @@ export class AiAssistantService {
         response: this.localized(language, {
           fr: 'J ai compris la creation d un produit. Completez le formulaire structure pour preparer la previsualisation.',
           en: 'I understood the product creation request. Complete the structured form to prepare the preview.',
-          ar: '???? ??? ????? ???? ??????. ???? ??????? ?????? ?????? ????????.',
+          ar: 'فهمت طلب إنشاء منتج. أكمل النموذج المنظم لتحضير المعاينة.',
         }),
         intent: 'create_product_form',
         toolCall: {
@@ -1112,6 +1379,23 @@ export class AiAssistantService {
       : invoiceNumber
         ? await this.resolveSingleInvoice(user, invoiceNumber).then((invoice) => invoice ? { invoiceId: invoice.id, invoiceReference: invoice.invoiceNumber } : null)
         : await this.resolveLatestInvoiceReference(user, conversationId);
+    const quoteReference = contextQuoteId
+      ? { quoteId: contextQuoteId, quoteReference: contextReference.quoteReference }
+      : quoteNumber
+        ? await this.resolveSingleQuote(user, quoteNumber).then((quote) => quote ? { quoteId: quote.id, quoteReference: quote.devisNumber } : null)
+        : await this.resolveLatestQuoteReference(user, conversationId);
+
+    if (quoteReference?.quoteId && this.matchesAny(normalized, ['email', 'mail', 'envoie', 'envoyer', 'send']) && (refersToCurrentQuote || Boolean(quoteNumber) || this.matchesAny(normalized, ['devis', 'quote']))) {
+      return {
+        response: this.localized(language, {
+          fr: `J'ai retrouve ${quoteReference.quoteReference ?? contextQuoteLabel}. Je prepare l'envoi email a confirmer avec le PDF joint du backend.`,
+          en: `I found ${quoteReference.quoteReference ?? contextQuoteLabel}. I am preparing the confirmation to send the email with the backend PDF attachment.`,
+          ar: `عثرت على ${quoteReference.quoteReference ?? contextQuoteLabel}. سأحضّر تأكيد إرسال البريد الإلكتروني مع ملف PDF من الخادم.`,
+        }),
+        intent: 'send_quote_email',
+        toolCall: { name: 'send_quote_email', input: { id: quoteReference.quoteId } },
+      };
+    }
 
     if (invoiceReference?.invoiceId && this.matchesAny(normalized, ['email', 'mail', 'envoie', 'envoyer', 'send'])) {
       return {
@@ -1157,7 +1441,7 @@ export class AiAssistantService {
           response: this.localized(language, {
             fr: 'Je peux changer l’échéance de cette facture, mais il me faut une date précise ou une indication claire comme "le mois prochain".',
             en: 'I can update this invoice due date, but I need a precise date or a clear hint such as "next month".',
-            ar: 'يمكنني تعديل تاريخ استحقاق هذه الفاتورة، لكنني أحتاج تاريخاً واضحاً أو إشارة مثل "الشهر القادم".',
+            ar: 'يمكنني تعديل تاريخ استحقاق هذه الفاتورة، لكنني أحتاج تاريخا واضحا أو إشارة مثل "الشهر القادم".',
           }),
           intent: 'clarify_invoice_due_date',
         };
@@ -1271,7 +1555,7 @@ export class AiAssistantService {
           response: this.localized(language, {
             fr: `J ai trouve ${contextContractLabel}. Je prepare une creation de facture a confirmer avec les donnees facturables disponibles.`,
             en: `I found ${contextContractLabel}. I am preparing invoice creation for confirmation using available billable data.`,
-            ar: `???? ??? ${contextContractLabel}. ???? ?????? ????? ???????? ??????? ???????? ???????? ??????? ??????? ???????.`,
+            ar: `لقد وجدت ${contextContractLabel}. أحضّر إنشاء فاتورة للتأكيد باستخدام البيانات القابلة للفوترة المتاحة.`,
           }),
           intent: 'contract_invoice_workflow',
           toolCall: { name: 'contract_invoice_workflow', input: { contractId: contextContractId } },
@@ -1285,7 +1569,7 @@ export class AiAssistantService {
             response: this.localized(language, {
               fr: `J ai retrouve le client ${client.name ?? invoiceTarget}. Completez les champs manquants dans le formulaire facture pour generer la previsualisation.`,
               en: `I found customer ${client.name ?? invoiceTarget}. Complete the missing fields in the invoice form to generate the preview.`,
-              ar: `???? ??? ?????? ${client.name ?? invoiceTarget}. ???? ?????? ??????? ?? ????? ???????? ?????? ????????.`,
+              ar: `لقد وجدت العميل ${client.name ?? invoiceTarget}. أكمل الحقول الناقصة في نموذج الفاتورة لإنشاء المعاينة.`,
             }),
             intent: 'create_invoice_form',
             toolCall: { name: 'create_invoice', input: { customerId: client.id } },
@@ -1301,7 +1585,7 @@ export class AiAssistantService {
               response: this.localized(language, {
                 fr: `J ai trouve le contrat ${contract.contractNumber ?? ''} lie a ${invoiceTarget}. Je prepare la facture a confirmer.`,
                 en: `I found contract ${contract.contractNumber ?? ''} linked to ${invoiceTarget}. I am preparing the invoice for confirmation.`,
-                ar: `???? ??? ????? ${contract.contractNumber ?? ''} ??????? ?? ${invoiceTarget}. ???? ?????? ???????? ???????.`,
+                ar: `لقد وجدت العقد ${contract.contractNumber ?? ''} المرتبط بـ ${invoiceTarget}. أحضّر الفاتورة للتأكيد.`,
               }),
               intent: 'contract_invoice_workflow',
               toolCall: { name: 'contract_invoice_workflow', input: { contractId: contract.id } },
@@ -1311,9 +1595,9 @@ export class AiAssistantService {
 
         return {
           response: this.localized(language, {
-            fr: `Je n ai pas retrouve un client ou un contrat correspondant a ${invoiceTarget}. Donnez un nom client exact ou une reference de contrat comme CTR-2026-0001.`,
-            en: `I could not find a matching customer or contract for ${invoiceTarget}. Give me the exact customer name or a contract reference like CTR-2026-0001.`,
-            ar: `?? ??? ?????? ?? ????? ??????? ?? ${invoiceTarget}. ????? ??? ?????? ?????? ?? ???? ??? ??? CTR-2026-0001.`,
+            fr: `Je n ai pas retrouve de client accessible correspondant a ${invoiceTarget}. Donnez le nom exact du client, son email, ou demandez-moi d afficher les clients accessibles.`,
+            en: `I could not find an accessible customer matching ${invoiceTarget}. Give me the exact customer name, the customer email, or ask me to list accessible customers.`,
+            ar: `لم أعثر على عميل متاح يطابق ${invoiceTarget}. أعطني الاسم الكامل للعميل أو بريده الإلكتروني أو اطلب مني عرض العملاء المتاحين.`,
           }),
           intent: 'clarify_create_invoice',
         };
@@ -1322,7 +1606,7 @@ export class AiAssistantService {
         response: this.localized(language, {
           fr: 'Je prepare le formulaire de creation de facture. Selectionnez le client et completez les informations requises pour generer la previsualisation.',
           en: 'I am preparing the invoice creation form. Select the customer and complete the required information to generate the preview.',
-          ar: '???? ?????? ????? ????? ????????. ???? ?????? ????? ????????? ???????? ?????? ????????.',
+          ar: 'أحضّر نموذج إنشاء الفاتورة. اختر العميل وأكمل المعلومات المطلوبة لإنشاء المعاينة.',
         }),
         intent: 'create_invoice_form',
         toolCall: { name: 'create_invoice', input: {} },
@@ -1333,6 +1617,25 @@ export class AiAssistantService {
       const invoiceReferenceForPdf = contextInvoiceId
         ? { invoiceId: contextInvoiceId, invoiceReference: contextReference.invoiceReference }
         : await this.resolveLatestInvoiceReference(user, conversationId);
+      const preferQuotePdf =
+        Boolean(quoteReference?.quoteId)
+        && (
+          refersToCurrentQuote
+          || Boolean(quoteNumber)
+          || this.matchesAny(normalized, ['devis', 'quote'])
+          || !invoiceReferenceForPdf?.invoiceId
+        );
+      if (preferQuotePdf) {
+        return {
+          response: this.localized(language, {
+            fr: 'Je prepare les informations PDF de ce devis.',
+            en: 'I am preparing PDF information for this quote.',
+            ar: 'سأحضر معلومات PDF لعرض السعر هذا.',
+          }),
+          intent: 'generate_quote_pdf',
+          toolCall: { name: 'generate_quote_pdf', input: { id: quoteReference!.quoteId } },
+        };
+      }
       if (!invoiceReferenceForPdf?.invoiceId) {
         return {
           response: this.localized(language, {
@@ -1377,6 +1680,22 @@ export class AiAssistantService {
       };
     }
 
+    if (
+      pdfIntent
+      && quoteReference?.quoteId
+      && (refersToCurrentQuote || Boolean(quoteNumber) || this.matchesAny(normalized, ['devis', 'quote']))
+    ) {
+      return {
+        response: this.localized(language, {
+          fr: 'Je prepare les informations PDF de ce devis.',
+          en: 'I am preparing PDF information for this quote.',
+          ar: 'سأحضر معلومات PDF لعرض السعر هذا.',
+        }),
+        intent: 'generate_quote_pdf',
+        toolCall: { name: 'generate_quote_pdf', input: { id: quoteReference.quoteId } },
+      };
+    }
+
     if (routedIntent[0]?.name === 'create_quote') {
       const quoteTarget = this.extractBusinessEntityQuery(content);
       const customer = quoteTarget ? await this.resolveSingleClient(user, quoteTarget) : null;
@@ -1389,8 +1708,8 @@ export class AiAssistantService {
             ? `I found customer ${customer.name ?? quoteTarget}. Complete the quote form to generate the preview.`
             : 'I am preparing the quote creation form. Complete the required information to generate the preview.',
           ar: customer
-            ? `???? ??? ?????? ${customer.name ?? quoteTarget}. ???? ????? ??? ????? ?????? ????????.`
-            : '???? ?????? ????? ????? ??? ?????. ???? ????????? ???????? ?????? ????????.',
+            ? `لقد وجدت العميل ${customer.name ?? quoteTarget}. أكمل نموذج عرض السعر لإنشاء المعاينة.`
+            : 'أحضّر نموذج إنشاء عرض السعر. أكمل المعلومات المطلوبة لإنشاء المعاينة.',
         }),
         intent: 'create_quote_form',
         toolCall: { name: 'create_quote', input: customer ? { customerId: customer.id } : {} },
@@ -1807,6 +2126,51 @@ export class AiAssistantService {
         }),
         intent: 'search_invoices',
         toolCall: { name: 'search_invoices', input: { search: invoiceNumber, limit: '5', page: '1' } },
+      };
+    }
+
+    if (quoteNumber) {
+      const quote = await this.resolveSingleQuote(user, quoteNumber);
+      if (quote) {
+        if (this.matchesAny(normalized, ['email', 'mail', 'envoie', 'envoyer', 'send'])) {
+          return {
+            response: this.localized(language, {
+              fr: `J'ai retrouve le devis ${quote.devisNumber}. Je prepare l'envoi email a confirmer.`,
+              en: `I found quote ${quote.devisNumber}. I am preparing the email confirmation.`,
+              ar: `عثرت على عرض السعر ${quote.devisNumber}. سأحضّر تأكيد البريد الإلكتروني.`,
+            }),
+            intent: 'send_quote_email',
+            toolCall: { name: 'send_quote_email', input: { id: quote.id } },
+          };
+        }
+        if (pdfIntent || this.matchesAny(normalized, ['apercu', 'preview', 'download', 'telecharge'])) {
+          return {
+            response: this.localized(language, {
+              fr: `Je prepare le PDF du devis ${quote.devisNumber}.`,
+              en: `I am preparing the PDF for quote ${quote.devisNumber}.`,
+              ar: `سأحضر ملف PDF لعرض السعر ${quote.devisNumber}.`,
+            }),
+            intent: 'generate_quote_pdf',
+            toolCall: { name: 'generate_quote_pdf', input: { id: quote.id } },
+          };
+        }
+        return {
+          response: this.localized(language, {
+            fr: `Je consulte le devis ${quote.devisNumber}.`,
+            en: `I am showing quote ${quote.devisNumber}.`,
+            ar: `سأعرض عرض السعر ${quote.devisNumber}.`,
+          }),
+          intent: 'get_quote_details',
+          toolCall: { name: 'get_quote_details', input: { id: quote.id } },
+        };
+      }
+      return {
+        response: this.localized(language, {
+          fr: `Je n ai trouve aucun devis correspondant a ${quoteNumber}.`,
+          en: `I could not find a quote matching ${quoteNumber}.`,
+          ar: `لم أجد عرض سعر يطابق ${quoteNumber}.`,
+        }),
+        intent: 'quote_not_found',
       };
     }
 
@@ -2340,20 +2704,21 @@ export class AiAssistantService {
     return null;
   }
 
-  private async resolveSingleClient(user: AssistantUser, query: string): Promise<{ id: string; name?: string; email?: string } | null> {
+  private async resolveSingleClient(user: AssistantUser, query: string): Promise<{ id: string; name?: string; company?: string; email?: string } | null> {
     const tool = this.tools.get('search_customers') ?? this.tools.get('search_clients');
     if (!tool) return null;
     await this.assertCanUseTool(user, tool);
 
-    const candidateMap = new Map<string, { id: string; name?: string; email?: string }>();
+    const candidateMap = new Map<string, { id: string; name?: string; company?: string; email?: string }>();
     for (const searchQuery of this.buildEntitySearchQueries(query)) {
-      const result = await tool.execute({ query: searchQuery, limit: 10 }, { user });
+      const result = await tool.execute({ search: searchQuery, limit: 10 }, { user });
       for (const row of this.unwrapListToolRows(result)) {
         const client = this.asRecord(row);
         if (!client || typeof client.id !== 'string') continue;
         candidateMap.set(client.id, {
           id: client.id,
           name: this.stringValue(client.name),
+          company: this.stringValue(client.company),
           email: this.stringValue(client.email),
         });
       }
@@ -2367,13 +2732,16 @@ export class AiAssistantService {
     const normalizedQuery = this.normalizeIntentText(query).trim();
     const exactMatches = candidates.filter((candidate) => {
       const candidateName = this.normalizeIntentText(candidate.name ?? '').trim();
+      const candidateCompany = this.normalizeIntentText(candidate.company ?? '').trim();
       const candidateEmail = this.normalizeIntentText(candidate.email ?? '').trim();
-      return (candidateName && candidateName === normalizedQuery) || (candidateEmail && candidateEmail === normalizedQuery);
+      return (candidateName && candidateName === normalizedQuery)
+        || (candidateCompany && candidateCompany === normalizedQuery)
+        || (candidateEmail && candidateEmail === normalizedQuery);
     });
     if (exactMatches.length > 0) {
       await this.logAudit(user.id, 'AI_ENTITY_RESOLVED', 'Customer', exactMatches[0]!.id, {
         query,
-        displayName: exactMatches[0]!.name ?? exactMatches[0]!.email,
+        displayName: exactMatches[0]!.name ?? exactMatches[0]!.company ?? exactMatches[0]!.email,
         resolution: exactMatches.length === 1 ? 'exact_client_match' : 'exact_client_match_multiple',
       });
       return exactMatches[0]!;
@@ -2384,6 +2752,7 @@ export class AiAssistantService {
         candidate,
         score: Math.max(
           this.computeEntitySimilarity(query, candidate.name),
+          this.computeEntitySimilarity(query, candidate.company),
           this.computeEntitySimilarity(query, candidate.email),
         ),
       }))
@@ -2395,7 +2764,7 @@ export class AiAssistantService {
     if (best.score >= 0.72 && (!second || best.score - second.score >= 0.08)) {
       await this.logAudit(user.id, 'AI_ENTITY_RESOLVED', 'Customer', best.candidate.id, {
         query,
-        displayName: best.candidate.name ?? best.candidate.email,
+        displayName: best.candidate.name ?? best.candidate.company ?? best.candidate.email,
         resolution: 'fuzzy_client_match',
         score: Number(best.score.toFixed(3)),
       });
@@ -2539,6 +2908,22 @@ export class AiAssistantService {
       displayName: invoice.invoiceNumber,
     });
     return { id: invoice.id, invoiceNumber: typeof invoice.invoiceNumber === 'string' ? invoice.invoiceNumber : undefined };
+  }
+
+  private async resolveSingleQuote(user: AssistantUser, query: string): Promise<{ id: string; devisNumber?: string } | null> {
+    const tool = this.tools.get('search_quotes');
+    if (!tool) return null;
+    await this.assertCanUseTool(user, tool);
+    const result = await tool.execute({ search: query, page: '1', limit: '5' }, { user });
+    const rows = this.asArray(this.asRecord(result)?.data ?? result);
+    if (rows.length !== 1) return null;
+    const quote = this.asRecord(rows[0]);
+    if (!quote || typeof quote.id !== 'string') return null;
+    await this.logAudit(user.id, 'AI_ENTITY_RESOLVED', 'Devis', quote.id, {
+      query,
+      displayName: quote.devisNumber,
+    });
+    return { id: quote.id, devisNumber: typeof quote.devisNumber === 'string' ? quote.devisNumber : undefined };
   }
 
   private async getInvoiceUpdatePayload(user: AssistantUser, invoiceId: string) {
@@ -3015,6 +3400,9 @@ export class AiAssistantService {
     if (pageContext?.entityType === 'invoice' && pageContext.entityId) {
       return { invoiceId: pageContext.entityId, invoiceReference: pageContext.readableReference, source: 'page' };
     }
+    if (pageContext?.entityType === 'quote' && pageContext.entityId) {
+      return { quoteId: pageContext.entityId, quoteReference: pageContext.readableReference, source: 'page' };
+    }
     if (pageContext?.entityType === 'client') {
       return { clientId: pageContext.entityId, clientReference: pageContext.readableReference, source: 'page' };
     }
@@ -3036,13 +3424,13 @@ export class AiAssistantService {
     if (!conversation) return { source: 'conversation' };
     for (const action of conversation.pendingActions) {
       const resultReference = this.extractContextReference(action.resultPayload);
-      if (resultReference.contractId || resultReference.invoiceId) return { ...resultReference, source: 'conversation' };
+      if (resultReference.contractId || resultReference.invoiceId || resultReference.quoteId) return { ...resultReference, source: 'conversation' };
       const reference = this.extractContextReference(action.previewPayload);
-      if (reference.contractId || reference.invoiceId) return { ...reference, source: 'conversation' };
+      if (reference.contractId || reference.invoiceId || reference.quoteId) return { ...reference, source: 'conversation' };
     }
     for (const message of conversation.messages) {
       const reference = this.extractContextReference(message.metadata);
-      if (reference.contractId || reference.invoiceId) return { ...reference, source: 'conversation' };
+      if (reference.contractId || reference.invoiceId || reference.quoteId) return { ...reference, source: 'conversation' };
     }
     return { source: 'conversation' };
   }
@@ -3068,7 +3456,7 @@ export class AiAssistantService {
       const selected = this.asRecord(rows[ordinal - 1]);
       if (!selected) continue;
       const reference = this.extractContextReference(selected);
-      if (reference.contractId || reference.invoiceId) return reference;
+      if (reference.contractId || reference.invoiceId || reference.quoteId) return reference;
     }
     return null;
   }
@@ -3101,6 +3489,34 @@ export class AiAssistantService {
     return null;
   }
 
+  private async resolveLatestQuoteReference(user: AssistantUser, conversationId: string): Promise<Pick<AssistantContextReference, 'quoteId' | 'quoteReference'> | null> {
+    const conversation = await prisma.aiConversation.findFirst({
+      where: { id: conversationId, userId: user.id },
+      select: {
+        messages: {
+          orderBy: { createdAt: 'desc' },
+          take: 12,
+          select: { metadata: true },
+        },
+        pendingActions: {
+          orderBy: { updatedAt: 'desc' },
+          take: 8,
+          select: { resultPayload: true },
+        },
+      },
+    });
+    if (!conversation) return null;
+    for (const action of conversation.pendingActions) {
+      const fromResult = this.extractQuoteReference(action.resultPayload);
+      if (fromResult?.quoteId) return fromResult;
+    }
+    for (const message of conversation.messages) {
+      const fromMessage = this.extractQuoteReference(message.metadata);
+      if (fromMessage?.quoteId) return fromMessage;
+    }
+    return null;
+  }
+
   private extractInvoiceReference(payload: unknown): Pick<AssistantContextReference, 'invoiceId' | 'invoiceReference'> | null {
     const value = this.asRecord(payload);
     const execution = this.asRecord(value?.executionResult) ?? value;
@@ -3125,6 +3541,35 @@ export class AiAssistantService {
       const invoiceId = this.stringValue(candidate.invoiceId ?? candidate.id);
       if (invoiceId && (invoiceReference || String(candidate.invoiceNumber ?? '').startsWith('INV-'))) {
         return { invoiceId, invoiceReference };
+      }
+    }
+    return null;
+  }
+
+  private extractQuoteReference(payload: unknown): Pick<AssistantContextReference, 'quoteId' | 'quoteReference'> | null {
+    const value = this.asRecord(payload);
+    const execution = this.asRecord(value?.executionResult) ?? value;
+    const executionResult = execution?.result;
+    const result = this.asRecord(executionResult) ?? this.asRecord(execution?.summary) ?? execution;
+    const action = this.asRecord(execution?.action);
+    const preview = this.asRecord(action?.previewPayload);
+    const previewSummary = this.asRecord(preview?.summary);
+    const candidates = [
+      result,
+      this.asRecord(result?.quote),
+      this.asRecord(result?.devis),
+      previewSummary,
+      this.asRecord(previewSummary?.quote),
+      this.asRecord(previewSummary?.devis),
+      ...this.asArray(executionResult).map((item) => this.asRecord(item)),
+      ...this.asArray(result).map((item) => this.asRecord(item)),
+    ].filter(Boolean) as Record<string, unknown>[];
+
+    for (const candidate of candidates) {
+      const quoteReference = this.stringValue(candidate.devisNumber ?? candidate.quoteNumber ?? candidate.quoteReference);
+      const quoteId = this.stringValue(candidate.quoteId ?? candidate.devisId ?? candidate.id);
+      if (quoteId && (quoteReference || String(candidate.devisNumber ?? candidate.quoteNumber ?? '').startsWith('DEV-'))) {
+        return { quoteId, quoteReference };
       }
     }
     return null;
@@ -3160,6 +3605,11 @@ export class AiAssistantService {
       if (invoiceReference || (possibleInvoiceId && String(candidate.invoiceNumber ?? '').startsWith('INV-'))) {
         return { invoiceId: possibleInvoiceId, invoiceReference };
       }
+      const quoteReference = this.stringValue(candidate.devisNumber ?? candidate.quoteNumber ?? candidate.quoteReference);
+      const possibleQuoteId = this.stringValue(candidate.quoteId ?? candidate.devisId ?? candidate.id);
+      if (quoteReference || (possibleQuoteId && String(candidate.devisNumber ?? candidate.quoteNumber ?? '').startsWith('DEV-'))) {
+        return { quoteId: possibleQuoteId, quoteReference };
+      }
       const clientReference = this.stringValue(candidate.clientName ?? candidate.customerName ?? candidate.clientReference ?? candidate.name);
       const possibleClientId = this.stringValue(candidate.clientId ?? candidate.customerId);
       if (clientReference || possibleClientId) {
@@ -3193,6 +3643,20 @@ export class AiAssistantService {
 
   private stringValue(value: unknown) {
     return typeof value === 'string' && value.trim() ? value : undefined;
+  }
+
+  private normalizeBusinessReferenceMentions(content: string) {
+    return content.replace(/\b(inv|ctr|dev)[\s_:-]*(\d{4})[\s_:-]*(\d{3,6})\b/gi, (_match, prefix: string, year: string, sequence: string) => {
+      return `${prefix.toUpperCase()}-${year}-${sequence.padStart(4, '0')}`;
+    });
+  }
+
+  private extractBusinessReference(content: string, prefix: 'INV' | 'CTR' | 'DEV') {
+    const normalizedContent = this.normalizeBusinessReferenceMentions(content);
+    const pattern = new RegExp(`\\b${prefix}-?(\\d{4})-?(\\d{3,6})\\b`, 'i');
+    const match = normalizedContent.match(pattern);
+    if (!match?.[1] || !match?.[2]) return null;
+    return `${prefix}-${match[1]}-${match[2].padStart(4, '0')}`;
   }
 
   private normalizeIntentText(value: string) {
@@ -3247,14 +3711,14 @@ export class AiAssistantService {
       response: this.localized(language, {
         fr: `J ai retrouve le client ${customerName}. Pour creer la facture via le flux manuel, il me manque encore la date d emission, la date d echeance, la devise et au moins une ligne avec description, quantite et prix unitaire.`,
         en: `I found customer ${customerName}. To create the invoice through the manual flow, I still need the issue date, due date, currency, and at least one line item with description, quantity, and unit price.`,
-        ar: `???? ??? ?????? ${customerName}. ?????? ???????? ??? ?????? ??????? ?? ??? ????? ??? ????? ??????? ?????? ????????? ??????? ???? ????? ??? ???? ????? ????? ??????? ???? ??????.`,
+        ar: `يمكنني إنشاء العميل ${customerName}. أكمل فقط المعلومات الناقصة قبل التأكيد.`,
       }),
       intent: 'clarify_create_invoice',
     };
   }
 
   private extractBusinessEntityQuery(content: string) {
-    const quoted = content.match(/["'â€œâ€](.+?)["'â€œâ€]/)?.[1];
+    const quoted = content.match(/["'“”](.+?)["'“”]/)?.[1];
     if (quoted?.trim()) return quoted.trim();
     const reference = content.match(/\b(?:CTR|INV|DEV|CN|CRN|PAY|CUS|CLT)-?\d{4}-?\d{0,6}\b/i)?.[0];
     if (reference) return reference.trim();
@@ -3669,6 +4133,31 @@ export class AiAssistantService {
     fields: unknown[];
     message: string;
     language: "fr" | "en" | "ar";
+    replaceActionId?: string;
+  }
+) {
+  const extracted = await this.extractStructuredFormValues(input);
+  const mergedInput = this.deepMerge(
+    input.currentValues,
+    extracted
+  );
+
+  return this.executeTool(user, {
+    toolName: input.toolName,
+    input: mergedInput,
+    conversationId: input.conversationId,
+    language: input.language,
+    replaceActionId: input.replaceActionId,
+  });
+}
+
+private async extractStructuredFormValues(
+  input: {
+    currentValues: Record<string, unknown>;
+    missingFields: string[];
+    fields: unknown[];
+    message: string;
+    language: "fr" | "en" | "ar";
   }
 ) {
   if (!env.OPENAI_API_KEY) {
@@ -3695,6 +4184,7 @@ export class AiAssistantService {
             "Never invent IDs, prices, quantities, dates, VAT rates, clients, products, or other business data.",
             "Return strict JSON only.",
             "Return an object containing only form fields that can be filled from the user's message.",
+            "If the message does not clearly provide any missing field value, return an empty JSON object.",
             "For date fields, return ISO YYYY-MM-DD when the date can be understood.",
             "For array fields, return arrays using the item field structure supplied below.",
             `Missing fields: ${JSON.stringify(input.missingFields)}`,
@@ -3744,27 +4234,50 @@ export class AiAssistantService {
     );
   }
 
-  let extracted: Record<string, unknown>;
-
   try {
-    extracted = JSON.parse(outputText) as Record<string, unknown>;
+    return JSON.parse(outputText) as Record<string, unknown>;
   } catch {
     throw ApiError.badRequest(
       "AI form completion returned invalid JSON."
     );
   }
+}
 
-  const mergedInput = this.deepMerge(
-    input.currentValues,
-    extracted
-  );
+private matchStructuredFormFields(extracted: Record<string, unknown>, missingFields: string[]) {
+  if (!missingFields.length) return [];
+  const extractedPaths = this.flattenStructuredValuePaths(extracted);
+  const normalizedMissingFields = missingFields.map((field) => field.replace(/\[\d+\]/g, "").trim()).filter(Boolean);
+  const matches = new Set<string>();
 
-  return this.executeTool(user, {
-    toolName: input.toolName,
-    input: mergedInput,
-    conversationId: input.conversationId,
-    language: input.language,
-  });
+  for (const path of extractedPaths) {
+    const normalizedPath = path.replace(/\[\d+\]/g, "").trim();
+    for (const missingField of normalizedMissingFields) {
+      if (
+        normalizedPath === missingField
+        || normalizedPath.startsWith(`${missingField}.`)
+        || missingField.startsWith(`${normalizedPath}.`)
+      ) {
+        matches.add(missingField);
+      }
+    }
+  }
+
+  return [...matches];
+}
+
+private flattenStructuredValuePaths(value: unknown, prefix = ""): string[] {
+  if (value == null) return [];
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) => this.flattenStructuredValuePaths(item, `${prefix}[${index}]`));
+  }
+  if (typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>).flatMap(([key, nestedValue]) => {
+      const nextPrefix = prefix ? `${prefix}.${key}` : key;
+      const nestedPaths = this.flattenStructuredValuePaths(nestedValue, nextPrefix);
+      return nestedPaths.length > 0 ? nestedPaths : [nextPrefix];
+    });
+  }
+  return prefix ? [prefix] : [];
 }
 }
 

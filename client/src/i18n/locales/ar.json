@@ -35,6 +35,19 @@
     "nativeFrench": "Français",
     "nativeArabic": "العربية"
   },
+  "telegram": {
+    "settings": {
+      "title": "تكامل تيليجرام",
+      "description": "اربط حساب ERP الخاص بك بتيليجرام للوصول إلى المساعد الذكي بأمان.",
+      "generating": "جارٍ الإنشاء...",
+      "connect": "ربط تيليجرام",
+      "secureCode": "رمز الربط الآمن الخاص بك",
+      "validity": "صالح لمدة 15 دقيقة.",
+      "sendCommand": "أرسل هذا الأمر إلى بوت تيليجرام:",
+      "copyCommand": "نسخ الأمر",
+      "expiresAt": "ينتهي في:"
+    }
+  },
   "login": {
     "title": "تسجيل الدخول",
     "secureWorkspace": "مساحة آمنة",
@@ -1861,8 +1874,8 @@
       "revise": "تعذر إعادة توليد معاينة هذا الإجراء.",
       "archive": "تعذر أرشفة هذه المحادثة.",
       "copy": "تعذر نسخ الرد.",
-      "contractNotInvoiceable": "???? ????? ?????? ??????? ?? ???????? ?? ?????? ???.",
-      "contractSignatureIncomplete": "??? ????? ???? ????? ????? ??? ???????."
+      "contractNotInvoiceable": "يمكن فقط فوترة العقود المرسلة أو التي تمت معاينتها أو النشطة.",
+      "contractSignatureIncomplete": "يجب إكمال مسار توقيع العقد قبل الفوترة."
     },
     "actionRevised": "تمت إعادة توليد المعاينة بتعديلاتك.",
     "editPreview": "تعديل المعاينة",
@@ -2087,8 +2100,8 @@
         "TIME_ENTRY_APPROVED": "تم اعتماد سجل وقت"
       }
     },
-    "lineItem": "????? {{index}}",
-    "addLine": "????? ???"
+    "lineItem": "السطر {{index}}",
+    "addLine": "إضافة سطر"
   },
   "notifications": {
     "confirm": {

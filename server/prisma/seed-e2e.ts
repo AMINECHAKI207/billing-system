@@ -35,6 +35,9 @@ async function resetData() {
   await prisma.recurringExecution.deleteMany();
   await prisma.recurringPlanItem.deleteMany();
   await prisma.recurringPlan.deleteMany();
+  await prisma.telegramSession.deleteMany();
+  await prisma.telegramLinkCode.deleteMany();
+  await prisma.telegramAccount.deleteMany();
   await prisma.reminder.deleteMany();
   await prisma.payment.deleteMany();
   await prisma.invoiceEmailLog.deleteMany();

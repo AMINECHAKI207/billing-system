@@ -91,6 +91,12 @@ type BusinessPriority = {
   currency?: string;
 };
 
+const internalSignatureFixtureInvoicePattern = /^SIG-[0-9a-f-]+-(?:UNSIGNED|SIGNED|UNSIGN|SNAPSHOT|NO-ASSETS)$/i;
+
+function isInternalSignatureFixtureInvoiceNumber(value: unknown) {
+  return typeof value === 'string' && internalSignatureFixtureInvoicePattern.test(value.trim());
+}
+
 type RecentActivity = {
   id: string;
   module: string;
@@ -445,7 +451,7 @@ async function revenueIntelligence(context: ToolContext) {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  const [monthInvoices, overdueInvoices, readyEntries] = await Promise.all([
+  const [monthInvoices, overdueInvoicesRaw, readyEntries] = await Promise.all([
     prisma.invoice.findMany({ where: { ...invoiceWhere, issueDate: { gte: monthStart, lt: nextMonth } }, select: { total: true, amountPaid: true, balanceDue: true, status: true, currency: true } }),
     prisma.invoice.findMany({ where: { ...invoiceWhere, balanceDue: { gt: 0 }, dueDate: { lt: now }, status: { not: InvoiceStatus.CANCELLED } }, select: { invoiceNumber: true, balanceDue: true, dueDate: true, customer: { select: { name: true, company: true } }, currency: true } }),
     hasPermission(user, 'contracts.view')
@@ -455,6 +461,7 @@ async function revenueIntelligence(context: ToolContext) {
       })
       : Promise.resolve([]),
   ]);
+  const overdueInvoices = overdueInvoicesRaw.filter((invoice) => !isInternalSignatureFixtureInvoiceNumber(invoice.invoiceNumber));
   return {
     revenueThisMonth: sum(monthInvoices, (invoice) => decimal(invoice.total)),
     collectedThisMonth: sum(monthInvoices, (invoice) => decimal(invoice.amountPaid)),

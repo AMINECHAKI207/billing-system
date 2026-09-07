@@ -44,9 +44,16 @@ const limit = z.coerce.number().int().min(1).max(50).default(10);
 const optionalPage = z.coerce.number().int().min(1).default(1).transform(String);
 const optionalLimit = limit.transform(String);
 const dateString = z.string().refine((value) => !Number.isNaN(Date.parse(value)), 'Invalid date');
-const optionalDate = dateString.optional();
+const optionalDate = z.preprocess((value) => (value === '' || value === null ? undefined : value), dateString.optional());
 const money = z.coerce.number().min(0);
+const optionalMoney = z.preprocess((value) => (value === '' || value === null ? undefined : value), money.optional());
 const positiveMoney = z.coerce.number().positive();
+const optionalPositiveMoney = z.preprocess((value) => {
+  if (value === '' || value === null || value === undefined) return undefined;
+  const numeric = typeof value === 'number' ? value : (typeof value === 'string' ? Number(value) : value);
+  if (typeof numeric === 'number' && Number.isFinite(numeric) && numeric === 0) return undefined;
+  return value;
+}, positiveMoney.optional());
 const currency = z.string().trim().min(3).max(10).default('MAD');
 
 const searchListInput = z.object({
@@ -85,19 +92,19 @@ const contractCreateInput = z.object({
   endDate: optionalDate,
   renewalType: z.nativeEnum(ContractRenewalType).default(ContractRenewalType.NONE),
   renewalNoticeDays: z.coerce.number().int().min(0).max(365).optional().nullable(),
-  amount: money.optional(),
+  amount: optionalMoney,
   currency,
   pricingType: z.nativeEnum(ContractPricingType).default(ContractPricingType.FIXED),
-  unitRate: positiveMoney.optional(),
-  estimatedQuantity: money.optional(),
-  fixedAmount: positiveMoney.optional(),
+  unitRate: optionalPositiveMoney,
+  estimatedQuantity: optionalMoney,
+  fixedAmount: optionalPositiveMoney,
   billingFrequency: z.nativeEnum(ContractBillingFrequency).default(ContractBillingFrequency.ONE_TIME),
   billingDay: z.coerce.number().int().min(1).max(31).optional().nullable(),
   billingStartDate: optionalDate,
   billingEndDate: optionalDate,
-  minimumBillableUnits: money.optional(),
-  includedUnits: money.optional(),
-  overtimeRate: money.optional(),
+  minimumBillableUnits: optionalMoney,
+  includedUnits: optionalMoney,
+  overtimeRate: optionalMoney,
   taxRate: z.coerce.number().min(0).max(100).default(0),
   paymentTermsDays: z.coerce.number().int().min(0).max(365).default(30),
   autoInvoiceEnabled: z.boolean().default(false),
@@ -179,6 +186,13 @@ const quoteCreateInput = z.object({
 }).strict();
 const quoteUpdateInput = quoteCreateInput.omit({ status: true }).extend({ id: uuid }).strict();
 const quoteStatusInput = z.object({ id: uuid, status: z.nativeEnum(DevisStatus) }).strict();
+const quoteEmailInput = z.object({
+  id: uuid,
+  recipientEmail: z.string().email().optional(),
+  subject: z.string().trim().min(3).max(255).optional(),
+  message: z.string().trim().min(3).max(5000).optional(),
+  pdfLanguage: z.enum(['fr', 'en', 'ar']).optional(),
+}).strict();
 
 const creditNoteCreateInput = z.object({
   invoiceId: uuid,
@@ -266,7 +280,7 @@ const recurringCreateInput = z.object({
   frequency: z.nativeEnum(RecurringFrequency),
   intervalCount: z.coerce.number().int().min(1).max(24).default(1),
   startDate: dateString,
-  endDate: dateString.optional().nullable(),
+  endDate: optionalDate.nullable(),
   dueDays: z.coerce.number().int().min(0).max(365).default(30),
   autoSend: z.boolean().default(false),
   currency,
@@ -553,59 +567,59 @@ async function resolveCreditNoteReasonDisplayValue(value: unknown) {
 
 function currencyOptions() {
   return [
-    option('MAD', 'Dirham marocain (MAD)', 'Moroccan dirham (MAD)', 'Ø§Ù„Ø¯Ø±Ù‡Ù… Ø§Ù„Ù…ØºØ±Ø¨ÙŠ (MAD)'),
-    option('EUR', 'Euro (EUR)', 'Euro (EUR)', 'Ø§Ù„ÙŠÙˆØ±Ùˆ (EUR)'),
-    option('USD', 'Dollar amÃ©ricain (USD)', 'US dollar (USD)', 'Ø§Ù„Ø¯ÙˆÙ„Ø§Ø± Ø§Ù„Ø£Ù…Ø±ÙŠÙƒÙŠ (USD)'),
+    option('MAD', 'Dirham marocain (MAD)', 'Moroccan dirham (MAD)', 'الدرهم المغربي (MAD)'),
+    option('EUR', 'Euro (EUR)', 'Euro (EUR)', 'اليورو (EUR)'),
+    option('USD', 'Dollar américain (USD)', 'US dollar (USD)', 'الدولار الأمريكي (USD)'),
   ];
 }
 
 const invoiceLineItemFields = [
-  { path: 'description', type: 'text', label: text('Description', 'Description', 'Ø§Ù„ÙˆØµÙ'), required: true, placeholder: text('Prestation ou produit', 'Service or product', 'Ø§Ù„Ø®Ø¯Ù…Ø© Ø£Ùˆ Ø§Ù„Ù…Ù†ØªØ¬') },
-  { path: 'quantity', type: 'number', label: text('QuantitÃ©', 'Quantity', 'Ø§Ù„ÙƒÙ…ÙŠØ©'), required: true, defaultValue: 1 },
-  { path: 'unitPrice', type: 'currency', label: text('Prix unitaire', 'Unit price', 'Ø³Ø¹Ø± Ø§Ù„ÙˆØ­Ø¯Ø©'), required: true, defaultValue: 0 },
-  { path: 'taxRate', type: 'number', label: text('TVA %', 'VAT %', 'Ù†Ø³Ø¨Ø© Ø§Ù„Ø¶Ø±ÙŠØ¨Ø© %'), defaultValue: 20 },
-  { path: 'unit', type: 'text', label: text('UnitÃ©', 'Unit', 'Ø§Ù„ÙˆØ­Ø¯Ø©'), placeholder: text('heure, jour, piÃ¨ceâ€¦', 'hour, day, unitâ€¦', 'Ø³Ø§Ø¹Ø©ØŒ ÙŠÙˆÙ…ØŒ ÙˆØ­Ø¯Ø©â€¦') },
+  { path: 'description', type: 'text', label: text('Description', 'Description', 'الوصف'), required: true, placeholder: text('Prestation ou produit', 'Service or product', 'الخدمة أو المنتج') },
+  { path: 'quantity', type: 'number', label: text('Quantité', 'Quantity', 'الكمية'), required: true, defaultValue: 1 },
+  { path: 'unitPrice', type: 'currency', label: text('Prix unitaire', 'Unit price', 'سعر الوحدة'), required: true, defaultValue: 0 },
+  { path: 'taxRate', type: 'number', label: text('TVA %', 'VAT %', 'نسبة الضريبة %'), defaultValue: 20 },
+  { path: 'unit', type: 'text', label: text('Unité', 'Unit', 'الوحدة'), placeholder: text('heure, jour, pièce…', 'hour, day, unit…', 'ساعة، يوم، وحدة…') },
 ] as const;
 
 const quoteLineItemFields = [
   ...invoiceLineItemFields,
-  { path: 'discount', type: 'currency', label: text('Remise', 'Discount', 'Ø§Ù„Ø®ØµÙ…'), defaultValue: 0 },
+  { path: 'discount', type: 'currency', label: text('Remise', 'Discount', 'الخصم'), defaultValue: 0 },
 ] as const;
 
 const paymentMethodOptions = [
-  option('BANK_TRANSFER', 'Virement bancaire', 'Bank transfer', '????? ????'),
-  option('CASH', 'Especes', 'Cash', '????'),
-  option('CHECK', 'Cheque', 'Check', '???'),
-  option('CARD', 'Carte', 'Card', '?????'),
-  option('OTHER', 'Autre', 'Other', '????'),
+  option('BANK_TRANSFER', 'Virement bancaire', 'Bank transfer', 'تحويل بنكي'),
+  option('CASH', 'Espèces', 'Cash', 'نقدا'),
+  option('CHECK', 'Chèque', 'Check', 'شيك'),
+  option('CARD', 'Carte', 'Card', 'بطاقة'),
+  option('OTHER', 'Autre', 'Other', 'أخرى'),
 ] as const;
 
 const expenseSourceOptions = [
-  option('MANUAL', 'Manuel', 'Manual', '????'),
-  option('AI', 'IA', 'AI', '???? ???????'),
+  option('MANUAL', 'Manuel', 'Manual', 'يدوي'),
+  option('AI', 'IA', 'AI', 'ذكاء اصطناعي'),
 ] as const;
 
 const recurringFrequencyOptions = [
-  option('WEEKLY', 'Hebdomadaire', 'Weekly', '??????'),
-  option('MONTHLY', 'Mensuel', 'Monthly', '????'),
-  option('QUARTERLY', 'Trimestriel', 'Quarterly', '??? ????'),
-  option('YEARLY', 'Annuel', 'Yearly', '????'),
+  option('WEEKLY', 'Hebdomadaire', 'Weekly', 'أسبوعي'),
+  option('MONTHLY', 'Mensuel', 'Monthly', 'شهري'),
+  option('QUARTERLY', 'Trimestriel', 'Quarterly', 'ربع سنوي'),
+  option('YEARLY', 'Annuel', 'Yearly', 'سنوي'),
 ] as const;
 
 const reminderTypeOptions = [
-  option('MANUAL', 'Manuel', 'Manual', '????'),
-  option('AUTOMATIC', 'Automatique', 'Automatic', '??????'),
+  option('MANUAL', 'Manuel', 'Manual', 'يدوي'),
+  option('AUTOMATIC', 'Automatique', 'Automatic', 'تلقائي'),
 ] as const;
 
 const roleOptions = [
-  option('ADMIN', 'Administrateur', 'Administrator', '?????'),
-  option('EMPLOYEE', 'Employe', 'Employee', '????'),
+  option('ADMIN', 'Administrateur', 'Administrator', 'مسؤول'),
+  option('EMPLOYEE', 'Employé', 'Employee', 'موظف'),
 ] as const;
 
 const permissionScopeOptions = [
-  option('ALL', 'Tous', 'All', '????'),
-  option('OWN', 'Propre', 'Own', '?????'),
-  option('SELECTED', 'Selection', 'Selected', '????'),
+  option('ALL', 'Tous', 'All', 'الكل'),
+  option('OWN', 'Propre', 'Own', 'الخاص'),
+  option('SELECTED', 'Sélection', 'Selected', 'محدد'),
 ] as const;
 
 export const erpTools: AiTool[] = [
@@ -635,19 +649,19 @@ export const erpTools: AiTool[] = [
     riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
     schema: customerInput,
     form: {
-      title: text('CrÃ©er un client', 'Create customer', 'Ø¥Ù†Ø´Ø§Ø¡ Ø¹Ù…ÙŠÙ„'),
-      description: text('ComplÃ©tez les informations client avant de gÃ©nÃ©rer la prÃ©visualisation.', 'Complete the customer information before generating the preview.', 'Ø£ÙƒÙ…Ù„ Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø¹Ù…ÙŠÙ„ Ù‚Ø¨Ù„ Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ù…Ø¹Ø§ÙŠÙ†Ø©.'),
+      title: text('Créer un client', 'Create customer', 'إنشاء عميل'),
+      description: text('Complétez les informations client avant de générer la prévisualisation.', 'Complete the customer information before generating the preview.', 'أكمل بيانات العميل قبل إنشاء المعاينة.'),
       fields: [
         { path: 'name', type: 'text', label: text('Nom du client', 'Customer name', 'Ø§Ø³Ù… Ø§Ù„Ø¹Ù…ÙŠÙ„'), required: true },
         { path: 'email', type: 'text', label: text('Email', 'Email', 'Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ø¥Ù„ÙƒØªØ±ÙˆÙ†ÙŠ'), required: true },
-        { path: 'phone', type: 'text', label: text('TÃ©lÃ©phone', 'Phone', 'Ø§Ù„Ù‡Ø§ØªÙ') },
-        { path: 'company', type: 'text', label: text('SociÃ©tÃ©', 'Company', 'Ø§Ù„Ø´Ø±ÙƒØ©') },
+        { path: 'phone', type: 'text', label: text('Téléphone', 'Phone', 'الهاتف') },
+        { path: 'company', type: 'text', label: text('Société', 'Company', 'الشركة') },
         { path: 'address', type: 'textarea', label: text('Adresse', 'Address', 'Ø§Ù„Ø¹Ù†ÙˆØ§Ù†') },
         { path: 'city', type: 'text', label: text('Ville', 'City', 'Ø§Ù„Ù…Ø¯ÙŠÙ†Ø©') },
         { path: 'country', type: 'text', label: text('Pays', 'Country', 'Ø§Ù„Ø¯ÙˆÙ„Ø©'), required: true },
         { path: 'countryCode', type: 'text', label: text('Code pays', 'Country code', 'Ø±Ù…Ø² Ø§Ù„Ø¯ÙˆÙ„Ø©'), required: true, placeholder: text('MA, FR, USâ€¦', 'MA, FR, USâ€¦', 'MA Ø£Ùˆ FR Ø£Ùˆ USâ€¦') },
         { path: 'postalCode', type: 'text', label: text('Code postal', 'Postal code', 'Ø§Ù„Ø±Ù…Ø² Ø§Ù„Ø¨Ø±ÙŠØ¯ÙŠ') },
-        { path: 'taxNumber', type: 'text', label: text('NumÃ©ro fiscal', 'Tax number', 'Ø§Ù„Ø±Ù‚Ù… Ø§Ù„Ø¶Ø±ÙŠØ¨ÙŠ') },
+        { path: 'taxNumber', type: 'text', label: text('Numéro fiscal', 'Tax number', 'الرقم الضريبي') },
       ],
     },
     preview: async (input) => preview('Create customer', 'A new customer will be created after confirmation.', input),
@@ -717,8 +731,8 @@ export const erpTools: AiTool[] = [
     riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
     schema: contractCreateInput,
     form: {
-      title: text('CrÃ©er un contrat', 'Create contract', 'Ø¥Ù†Ø´Ø§Ø¡ Ø¹Ù‚Ø¯'),
-      description: text('Renseignez les informations contractuelles avant de gÃ©nÃ©rer la prÃ©visualisation.', 'Complete the contract information before generating the preview.', 'Ø£ÙƒÙ…Ù„ Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø¹Ù‚Ø¯ Ù‚Ø¨Ù„ Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ù…Ø¹Ø§ÙŠÙ†Ø©.'),
+      title: text('Créer un contrat', 'Create contract', 'إنشاء عقد'),
+      description: text('Renseignez les informations contractuelles avant de générer la prévisualisation.', 'Complete the contract information before generating the preview.', 'أكمل بيانات العقد قبل إنشاء المعاينة.'),
       buildInitialValue: async () => {
         const settings = await settingsService.getCompanySettings();
         return {
@@ -738,19 +752,19 @@ export const erpTools: AiTool[] = [
         { path: 'clientId', type: 'entity', entityType: 'customer', label: text('Client', 'Customer', 'Ø§Ù„Ø¹Ù…ÙŠÙ„'), required: true, resolveDisplayValue: resolveContractCustomerDisplayValue },
         { path: 'title', type: 'text', label: text('Titre du contrat', 'Contract title', 'Ø¹Ù†ÙˆØ§Ù† Ø§Ù„Ø¹Ù‚Ø¯'), required: true },
         { path: 'contractType', type: 'text', label: text('Type de contrat', 'Contract type', 'Ù†ÙˆØ¹ Ø§Ù„Ø¹Ù‚Ø¯'), required: true },
-        { path: 'language', type: 'select', label: text('Langue', 'Language', 'Ø§Ù„Ù„ØºØ©'), required: true, options: [option('fr', 'FranÃ§ais', 'French', 'Ø§Ù„ÙØ±Ù†Ø³ÙŠØ©'), option('en', 'Anglais', 'English', 'Ø§Ù„Ø¥Ù†Ø¬Ù„ÙŠØ²ÙŠØ©'), option('ar', 'Arabe', 'Arabic', 'Ø§Ù„Ø¹Ø±Ø¨ÙŠØ©')] },
-        { path: 'startDate', type: 'date', label: text('Date de dÃ©but', 'Start date', 'ØªØ§Ø±ÙŠØ® Ø§Ù„Ø¨Ø¯Ø§ÙŠØ©') },
+        { path: 'language', type: 'select', label: text('Langue', 'Language', 'اللغة'), required: true, options: [option('fr', 'Français', 'French', 'الفرنسية'), option('en', 'Anglais', 'English', 'الإنجليزية'), option('ar', 'Arabe', 'Arabic', 'العربية')] },
+        { path: 'startDate', type: 'date', label: text('Date de début', 'Start date', 'تاريخ البداية') },
         { path: 'endDate', type: 'date', label: text('Date de fin', 'End date', 'ØªØ§Ø±ÙŠØ® Ø§Ù„Ù†Ù‡Ø§ÙŠØ©') },
         { path: 'currency', type: 'select', label: text('Devise', 'Currency', 'Ø§Ù„Ø¹Ù…Ù„Ø©'), required: true, options: currencyOptions() },
-        { path: 'pricingType', type: 'select', label: text('Tarification', 'Pricing type', 'Ù†ÙˆØ¹ Ø§Ù„ØªØ³Ø¹ÙŠØ±'), required: true, options: [option('FIXED', 'Forfait', 'Fixed fee', 'Ù…Ø¨Ù„Øº Ø«Ø§Ø¨Øª'), option('HOURLY', 'Horaire', 'Hourly', 'Ø¨Ø§Ù„Ø³Ø§Ø¹Ø©'), option('DAILY', 'Journalier', 'Daily', 'ÙŠÙˆÙ…ÙŠ'), option('MONTHLY', 'Mensuel', 'Monthly', 'Ø´Ù‡Ø±ÙŠ'), option('CUSTOM', 'PersonnalisÃ©', 'Custom', 'Ù…Ø®ØµØµ')] },
+        { path: 'pricingType', type: 'select', label: text('Tarification', 'Pricing type', 'نوع التسعير'), required: true, options: [option('FIXED', 'Forfait', 'Fixed fee', 'مبلغ ثابت'), option('HOURLY', 'Horaire', 'Hourly', 'بالساعة'), option('DAILY', 'Journalier', 'Daily', 'يومي'), option('MONTHLY', 'Mensuel', 'Monthly', 'شهري'), option('CUSTOM', 'Personnalisé', 'Custom', 'مخصص')] },
         { path: 'fixedAmount', type: 'currency', label: text('Montant forfaitaire', 'Fixed amount', 'Ø§Ù„Ù…Ø¨Ù„Øº Ø§Ù„Ø«Ø§Ø¨Øª') },
         { path: 'unitRate', type: 'currency', label: text('Tarif unitaire', 'Unit rate', 'Ø§Ù„Ø³Ø¹Ø± Ø§Ù„ÙˆØ­Ø¯ÙˆÙŠ') },
-        { path: 'estimatedQuantity', type: 'number', label: text('QuantitÃ© estimÃ©e', 'Estimated quantity', 'Ø§Ù„ÙƒÙ…ÙŠØ© Ø§Ù„ØªÙ‚Ø¯ÙŠØ±ÙŠØ©') },
-        { path: 'billingFrequency', type: 'select', label: text('FrÃ©quence de facturation', 'Billing frequency', 'ÙˆØªÙŠØ±Ø© Ø§Ù„ÙÙˆØªØ±Ø©'), required: true, options: [option('ONE_TIME', 'Une seule fois', 'One time', 'Ù…Ø±Ø© ÙˆØ§Ø­Ø¯Ø©'), option('DAILY', 'Quotidienne', 'Daily', 'ÙŠÙˆÙ…ÙŠ'), option('WEEKLY', 'Hebdomadaire', 'Weekly', 'Ø£Ø³Ø¨ÙˆØ¹ÙŠ'), option('MONTHLY', 'Mensuelle', 'Monthly', 'Ø´Ù‡Ø±ÙŠ'), option('QUARTERLY', 'Trimestrielle', 'Quarterly', 'Ø±Ø¨Ø¹ Ø³Ù†ÙˆÙŠ'), option('SEMI_ANNUAL', 'Semestrielle', 'Semi annual', 'Ù†ØµÙ Ø³Ù†ÙˆÙŠ'), option('ANNUAL', 'Annuelle', 'Annual', 'Ø³Ù†ÙˆÙŠ')] },
+        { path: 'estimatedQuantity', type: 'number', label: text('Quantité estimée', 'Estimated quantity', 'الكمية التقديرية') },
+        { path: 'billingFrequency', type: 'select', label: text('Fréquence de facturation', 'Billing frequency', 'وتيرة الفوترة'), required: true, options: [option('ONE_TIME', 'Une seule fois', 'One time', 'مرة واحدة'), option('DAILY', 'Quotidienne', 'Daily', 'يومي'), option('WEEKLY', 'Hebdomadaire', 'Weekly', 'أسبوعي'), option('MONTHLY', 'Mensuelle', 'Monthly', 'شهري'), option('QUARTERLY', 'Trimestrielle', 'Quarterly', 'ربع سنوي'), option('SEMI_ANNUAL', 'Semestrielle', 'Semi annual', 'نصف سنوي'), option('ANNUAL', 'Annuelle', 'Annual', 'سنوي')] },
         { path: 'taxRate', type: 'number', label: text('TVA %', 'VAT %', 'Ù†Ø³Ø¨Ø© Ø§Ù„Ø¶Ø±ÙŠØ¨Ø© %') },
-        { path: 'paymentTermsDays', type: 'number', label: text('DÃ©lai de paiement (jours)', 'Payment terms (days)', 'Ø£Ø¬Ù„ Ø§Ù„Ø¯ÙØ¹ Ø¨Ø§Ù„Ø£ÙŠØ§Ù…') },
+        { path: 'paymentTermsDays', type: 'number', label: text('Délai de paiement (jours)', 'Payment terms (days)', 'أجل الدفع بالأيام') },
         { path: 'billingDescription', type: 'textarea', label: text('Description de facturation', 'Billing description', 'ÙˆØµÙ Ø§Ù„ÙÙˆØªØ±Ø©') },
-        { path: 'summary', type: 'textarea', label: text('RÃ©sumÃ©', 'Summary', 'Ø§Ù„Ù…Ù„Ø®Øµ') },
+        { path: 'summary', type: 'textarea', label: text('Résumé', 'Summary', 'الملخص') },
         { path: 'terms', type: 'textarea', label: text('Conditions', 'Terms', 'Ø§Ù„Ø´Ø±ÙˆØ·') },
         { path: 'content', type: 'textarea', label: text('Contenu du contrat', 'Contract content', 'Ù…Ø­ØªÙˆÙ‰ Ø§Ù„Ø¹Ù‚Ø¯') },
       ],
@@ -911,8 +925,8 @@ export const erpTools: AiTool[] = [
     riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
     schema: invoiceCreateInput,
     form: {
-      title: text('CrÃ©er une facture', 'Create invoice', 'Ø¥Ù†Ø´Ø§Ø¡ ÙØ§ØªÙˆØ±Ø©'),
-      description: text('ComplÃ©tez les champs manquants pour prÃ©parer une facture manuelle.', 'Complete the missing fields to prepare a manual invoice.', 'Ø£ÙƒÙ…Ù„ Ø§Ù„Ø­Ù‚ÙˆÙ„ Ø§Ù„Ù†Ø§Ù‚ØµØ© Ù„ØªØ­Ø¶ÙŠØ± ÙØ§ØªÙˆØ±Ø© ÙŠØ¯ÙˆÙŠØ©.'),
+      title: text('Créer une facture', 'Create invoice', 'إنشاء فاتورة'),
+      description: text('Complétez les champs manquants pour préparer une facture manuelle.', 'Complete the missing fields to prepare a manual invoice.', 'أكمل الحقول الناقصة لتحضير فاتورة يدوية.'),
       buildInitialValue: async () => {
         const settings = await settingsService.getCompanySettings();
         return {
@@ -925,8 +939,8 @@ export const erpTools: AiTool[] = [
       },
       fields: [
         { path: 'customerId', type: 'entity', entityType: 'customer', label: text('Client', 'Customer', 'Ø§Ù„Ø¹Ù…ÙŠÙ„'), required: true, resolveDisplayValue: resolveCustomerDisplayValue },
-        { path: 'issueDate', type: 'date', label: text('Date dâ€™Ã©mission', 'Issue date', 'ØªØ§Ø±ÙŠØ® Ø§Ù„Ø¥ØµØ¯Ø§Ø±'), required: true },
-        { path: 'dueDate', type: 'date', label: text('Date dâ€™Ã©chÃ©ance', 'Due date', 'ØªØ§Ø±ÙŠØ® Ø§Ù„Ø§Ø³ØªØ­Ù‚Ø§Ù‚'), required: true },
+        { path: 'issueDate', type: 'date', label: text('Date d’émission', 'Issue date', 'تاريخ الإصدار'), required: true },
+        { path: 'dueDate', type: 'date', label: text('Date d’échéance', 'Due date', 'تاريخ الاستحقاق'), required: true },
         { path: 'currency', type: 'select', label: text('Devise', 'Currency', 'Ø§Ù„Ø¹Ù…Ù„Ø©'), required: true, options: currencyOptions() },
         { path: 'taxRate', type: 'number', label: text('TVA %', 'VAT %', 'Ù†Ø³Ø¨Ø© Ø§Ù„Ø¶Ø±ÙŠØ¨Ø© %') },
         { path: 'discount', type: 'currency', label: text('Remise globale', 'Global discount', 'Ø§Ù„Ø®ØµÙ… Ø§Ù„Ø¥Ø¬Ù…Ø§Ù„ÙŠ') },
@@ -1070,6 +1084,24 @@ export const erpTools: AiTool[] = [
     execute: (input, context) => devisService.getDevisById(input.id, context.user.id, erpScope(context, 'devis.view')),
   },
   {
+    name: 'generate_quote_pdf',
+    description: 'Prepare quote/devis PDF information.',
+    module: 'quotes',
+    requiredPermission: 'devis.download',
+    riskLevel: AiToolRiskLevel.READ_ONLY,
+    schema: entityIdInput,
+    execute: async (input, context) => {
+      const quote = await devisService.getDevisById(input.id, context.user.id, erpScope(context, 'devis.download'));
+      return {
+        id: quote.id,
+        devisNumber: quote.devisNumber,
+        status: quote.status,
+        customerName: quote.customer?.company || quote.customer?.name,
+        downloadEndpoint: `/api/devis/${quote.id}/pdf`,
+      };
+    },
+  },
+  {
     name: 'create_quote',
     description: 'Create a quote/devis.',
     module: 'quotes',
@@ -1077,8 +1109,8 @@ export const erpTools: AiTool[] = [
     riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
     schema: quoteCreateInput,
     form: {
-      title: text('CrÃ©er un devis', 'Create quote', 'Ø¥Ù†Ø´Ø§Ø¡ Ø¹Ø±Ø¶ Ø³Ø¹Ø±'),
-      description: text('ComplÃ©tez les informations du devis avant de gÃ©nÃ©rer la prÃ©visualisation.', 'Complete the quote information before generating the preview.', 'Ø£ÙƒÙ…Ù„ Ø¨ÙŠØ§Ù†Ø§Øª Ø¹Ø±Ø¶ Ø§Ù„Ø³Ø¹Ø± Ù‚Ø¨Ù„ Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ù…Ø¹Ø§ÙŠÙ†Ø©.'),
+      title: text('Créer un devis', 'Create quote', 'إنشاء عرض سعر'),
+      description: text('Complétez les informations du devis avant de générer la prévisualisation.', 'Complete the quote information before generating the preview.', 'أكمل بيانات عرض السعر قبل إنشاء المعاينة.'),
       buildInitialValue: async () => {
         const settings = await settingsService.getCompanySettings();
         return {
@@ -1091,7 +1123,7 @@ export const erpTools: AiTool[] = [
       },
       fields: [
         { path: 'customerId', type: 'entity', entityType: 'customer', label: text('Client', 'Customer', 'Ø§Ù„Ø¹Ù…ÙŠÙ„'), required: true, resolveDisplayValue: resolveCustomerDisplayValue },
-        { path: 'issueDate', type: 'date', label: text('Date dâ€™Ã©mission', 'Issue date', 'ØªØ§Ø±ÙŠØ® Ø§Ù„Ø¥ØµØ¯Ø§Ø±'), required: true },
+        { path: 'issueDate', type: 'date', label: text('Date d’émission', 'Issue date', 'تاريخ الإصدار'), required: true },
         { path: 'validUntil', type: 'date', label: text('Valable jusquâ€™au', 'Valid until', 'ØµØ§Ù„Ø­ Ø¥Ù„Ù‰ ØºØ§ÙŠØ©'), required: true },
         { path: 'currency', type: 'select', label: text('Devise', 'Currency', 'Ø§Ù„Ø¹Ù…Ù„Ø©'), required: true, options: currencyOptions() },
         { path: 'taxRate', type: 'number', label: text('TVA %', 'VAT %', 'Ù†Ø³Ø¨Ø© Ø§Ù„Ø¶Ø±ÙŠØ¨Ø© %') },
@@ -1205,6 +1237,33 @@ export const erpTools: AiTool[] = [
     execute: (input, context) => {
       erpScope(context, 'invoices.create', AI_ASSISTANT_PERMISSIONS.useWriteTools);
       return devisService.convertToInvoice(input.id, context.user.id, erpScope(context, 'devis.convert', AI_ASSISTANT_PERMISSIONS.useWriteTools));
+    },
+  },
+  {
+    name: 'send_quote_email',
+    description: 'Send a quote/devis PDF by email.',
+    module: 'email',
+    requiredPermission: 'devis.send',
+    riskLevel: AiToolRiskLevel.CONFIRMATION_REQUIRED,
+    schema: quoteEmailInput,
+    preview: async (input, context) => {
+      const quote = await devisService.getDevisById(input.id, context.user.id, erpScope(context, 'devis.send'));
+      return {
+        title: 'Send quote by email',
+        description: `Quote ${quote.devisNumber}`,
+        summary: {
+          devisNumber: quote.devisNumber,
+          customer: quote.customer?.company || quote.customer?.name,
+          to: input.recipientEmail ?? quote.customer?.email,
+          subject: input.subject ?? `Devis ${quote.devisNumber}`,
+          total: Number(quote.total),
+          currency: quote.currency,
+        },
+      };
+    },
+    execute: ({ id, ...data }, context) => {
+      erpScope(context, 'devis.send', AI_ASSISTANT_PERMISSIONS.useWriteTools);
+      return devisService.sendDevisEmail(id, context.user.id, permissionScope(context.user.permissionScopes, 'devis.send'), data);
     },
   },
   {

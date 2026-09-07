@@ -41,6 +41,10 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_MODEL: z.string().default('gpt-5-nano'),
 
+  TELEGRAM_MODE: z.enum(['disabled', 'polling', 'webhook']).default('polling'),
+  TELEGRAM_BOT_TOKEN: z.string().min(20).optional(),
+  TELEGRAM_WEBHOOK_SECRET: z.string().min(12).optional(),
+
   DEFAULT_CURRENCY: z.string().default('MAD'),
   COMPANY_NAME: z.string().default('My Company'),
   COMPANY_ADDRESS: z.string().optional(),
@@ -67,6 +71,30 @@ const envSchema = z.object({
         message: `${key} must be changed for production`,
       });
     }
+  }
+
+  if (value.NODE_ENV === 'production' && value.TELEGRAM_MODE !== 'disabled' && !value.TELEGRAM_BOT_TOKEN) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['TELEGRAM_BOT_TOKEN'],
+      message: 'TELEGRAM_BOT_TOKEN is required when Telegram is enabled in production',
+    });
+  }
+
+  if (value.TELEGRAM_MODE === 'webhook' && !value.TELEGRAM_BOT_TOKEN) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['TELEGRAM_BOT_TOKEN'],
+      message: 'TELEGRAM_BOT_TOKEN is required in webhook mode',
+    });
+  }
+
+  if (value.TELEGRAM_MODE === 'webhook' && !value.TELEGRAM_WEBHOOK_SECRET) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['TELEGRAM_WEBHOOK_SECRET'],
+      message: 'TELEGRAM_WEBHOOK_SECRET is required in webhook mode',
+    });
   }
 });
 

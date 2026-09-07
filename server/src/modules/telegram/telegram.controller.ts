@@ -1,10 +1,18 @@
 import { Request, Response } from "express";
+import { env } from "@config/env";
 import { handleTelegramUpdate } from "./telegram.service";
 import { createTelegramLinkCode } from "./telegram.service";
 
 export async function telegramWebhook(req: Request, res: Response) {
   try {
-    const expectedSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+    if (env.TELEGRAM_MODE !== "webhook") {
+      return res.status(409).json({
+        success: false,
+        message: "Telegram webhook mode is disabled",
+      });
+    }
+
+    const expectedSecret = env.TELEGRAM_WEBHOOK_SECRET;
 
     const receivedSecret = req.get(
       "X-Telegram-Bot-Api-Secret-Token"

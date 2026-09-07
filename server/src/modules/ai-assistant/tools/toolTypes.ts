@@ -6,6 +6,9 @@ export type AssistantUser = {
   name: string;
   email: string;
   role: Role;
+  themePreference?: string | null;
+  isActive?: boolean;
+  rbacRoleId?: string | null;
   permissions: string[];
   permissionScopes?: Record<string, PermissionScope>;
 };

@@ -257,6 +257,7 @@ model User {
   updatedAt         DateTime           @updatedAt @map("updated_at")
   telegramAccount   TelegramAccount?
   telegramLinkCodes TelegramLinkCode[]
+  telegramSessions  TelegramSession[]
 
   // Relations
   customers                     Customer[]
@@ -338,6 +339,32 @@ model TelegramLinkCode {
   @@index([userId])
   @@index([expiresAt])
   @@map("telegram_link_codes")
+}
+
+model TelegramSession {
+  id                  String    @id @default(uuid()) @db.Uuid
+  telegramUserId      String    @map("telegram_user_id") @db.VarChar(50)
+  telegramChatId      String    @unique @map("telegram_chat_id") @db.VarChar(50)
+  userId              String?   @map("user_id") @db.Uuid
+  conversationId      String?   @map("conversation_id") @db.Uuid
+  language            String    @default("fr") @db.VarChar(10)
+  awaitingEmail       Boolean   @default(false) @map("awaiting_email")
+  pendingToolName     String?   @map("pending_tool_name") @db.VarChar(120)
+  pendingFormValues   Json?     @map("pending_form_values")
+  pendingMissingFields Json?    @map("pending_missing_fields")
+  pendingFields       Json?     @map("pending_fields")
+  stateExpiresAt      DateTime? @map("state_expires_at")
+  lastCodeRequestedAt DateTime? @map("last_code_requested_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+  lastInteractionAt   DateTime  @default(now()) @map("last_interaction_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([telegramUserId])
+  @@index([userId])
+  @@index([stateExpiresAt])
+  @@map("telegram_sessions")
 }
 
 model AuditLog {

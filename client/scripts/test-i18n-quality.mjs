@@ -29,13 +29,23 @@ try {
   fs.writeFileSync(path.join(fixtureLocaleDir, 'fr.json'), `${JSON.stringify(fr, null, 2)}\n`, 'utf8');
   runExpectFailure(['node', 'scripts/audit-i18n.mjs', '--locale-dir', fixtureLocaleDir, '--skip-index'], 'raw PAID status self-test');
 
+  const telegramFixturePath = path.join(tempDir, 'telegram.service.ts');
+  fs.writeFileSync(telegramFixturePath, 'export const message = "ðŸŽ¤ Jâ€™ai compris";\n', 'utf8');
+  runExpectFailure(
+    ['node', 'scripts/audit-i18n.mjs', '--telegram-file', telegramFixturePath, '--skip-index', '--locale-dir', fixtureLocaleDir],
+    'telegram mojibake self-test'
+  );
+
   console.log('i18n quality tests passed');
 } finally {
   fs.rmSync(tempDir, { recursive: true, force: true });
 }
 
 function runExpectSuccess(command, label) {
-  const result = spawnSync(command[0], command.slice(1), { cwd: rootDir, encoding: 'utf8' });
+  const result = spawnSync(command[0], command.slice(1), {
+    cwd: rootDir,
+    encoding: 'utf8',
+  });
   if (result.status !== 0) {
     console.error(`${label} failed unexpectedly`);
     console.error(result.stdout);
@@ -45,7 +55,10 @@ function runExpectSuccess(command, label) {
 }
 
 function runExpectFailure(command, label) {
-  const result = spawnSync(command[0], command.slice(1), { cwd: rootDir, encoding: 'utf8' });
+  const result = spawnSync(command[0], command.slice(1), {
+    cwd: rootDir,
+    encoding: 'utf8',
+  });
   if (result.status === 0) {
     console.error(`${label} passed unexpectedly`);
     console.error(result.stdout);

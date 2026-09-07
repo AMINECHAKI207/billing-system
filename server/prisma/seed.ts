@@ -24,6 +24,9 @@ async function main() {
   await prisma.recurringExecution.deleteMany();
   await prisma.recurringPlanItem.deleteMany();
   await prisma.recurringPlan.deleteMany();
+  await prisma.telegramSession.deleteMany();
+  await prisma.telegramLinkCode.deleteMany();
+  await prisma.telegramAccount.deleteMany();
   await prisma.aiPendingAction.deleteMany();
   await prisma.aiMessage.deleteMany();
   await prisma.aiConversation.deleteMany();

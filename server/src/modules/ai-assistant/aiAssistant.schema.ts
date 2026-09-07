@@ -24,7 +24,7 @@ export const aiMessageSchema = z.object({
     content: z.string().trim().min(1).max(4000),
     language,
     context: z.object({
-      entityType: z.enum(['contract', 'invoice', 'timesheet', 'client']).optional(),
+      entityType: z.enum(['contract', 'invoice', 'quote', 'timesheet', 'client']).optional(),
       entityId: uuid.optional(),
       readableReference: z.string().trim().max(160).optional(),
     }).optional(),

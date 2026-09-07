@@ -10,6 +10,7 @@ import {
   Role,
 } from '@prisma/client';
 import { prisma } from '@config/database';
+import { env } from '@config/env';
 import { aiAssistantService } from '@modules/ai-assistant/aiAssistant.service';
 import { contractService } from '@modules/contract/contract.service';
 
@@ -17,8 +18,11 @@ const runId = Date.now();
 const adminEmail = `ai-admin-${runId}@example.com`;
 const customerEmail = `ai-client-${runId}@example.com`;
 const secondaryCustomerEmail = `ai-client-secondary-${runId}@example.com`;
+const originalOpenAiApiKey = env.OPENAI_API_KEY;
+const originalSemanticClassifier = (aiAssistantService as any).classifySemanticIntent?.bind(aiAssistantService);
 
 async function main() {
+  env.OPENAI_API_KEY = undefined;
   const admin = await prisma.user.create({
     data: {
       name: 'AI Admin',
@@ -63,6 +67,10 @@ async function main() {
       'ai_assistant.confirm_actions',
       'ai_assistant.view_history',
       'clients.view',
+      'devis.view',
+      'devis.create',
+      'devis.send',
+      'devis.download',
       'contracts.view',
       'contracts.create',
       'contracts.time_entries.create',
@@ -71,6 +79,8 @@ async function main() {
       'contracts.time_entries.approve',
       'contracts.billing.generate',
       'invoices.view',
+      'invoices.create',
+      'recurring.create',
     ],
     permissionScopes: {
       'ai_assistant.access': PermissionScope.ALL,
@@ -79,6 +89,10 @@ async function main() {
       'ai_assistant.confirm_actions': PermissionScope.ALL,
       'ai_assistant.view_history': PermissionScope.ALL,
       'clients.view': PermissionScope.ALL,
+      'devis.view': PermissionScope.ALL,
+      'devis.create': PermissionScope.ALL,
+      'devis.send': PermissionScope.ALL,
+      'devis.download': PermissionScope.ALL,
       'contracts.view': PermissionScope.ALL,
       'contracts.create': PermissionScope.ALL,
       'contracts.time_entries.create': PermissionScope.ALL,
@@ -87,6 +101,8 @@ async function main() {
       'contracts.time_entries.approve': PermissionScope.ALL,
       'contracts.billing.generate': PermissionScope.ALL,
       'invoices.view': PermissionScope.ALL,
+      'invoices.create': PermissionScope.ALL,
+      'recurring.create': PermissionScope.ALL,
     },
   };
 
@@ -281,6 +297,62 @@ async function main() {
     assert.equal((overdueInvoicesIntent.executionResult as { type: string; toolName?: string }).type, 'tool_result');
     assert.equal((overdueInvoicesIntent.executionResult as { toolName?: string }).toolName, 'analyze_revenue_intelligence');
 
+    const customerInvoiceConversation = await aiAssistantService.createConversation(assistantUser, {
+      language: 'en',
+      title: `customer invoice routing ${runId}`,
+    });
+
+    const quotedCustomerInvoice = await aiAssistantService.sendMessage(assistantUser, customerInvoiceConversation.id, {
+      language: 'en',
+      content: 'Create an invoice for "AI Client"',
+    });
+    assert.equal((quotedCustomerInvoice.executionResult as { type: string; toolName?: string }).type, 'structured_form');
+    assert.equal((quotedCustomerInvoice.executionResult as { toolName?: string }).toolName, 'create_invoice');
+    assert.match(quotedCustomerInvoice.message.content, /AI Client/);
+
+    const lowercaseCustomerInvoice = await aiAssistantService.sendMessage(assistantUser, customerInvoiceConversation.id, {
+      language: 'en',
+      content: 'create an invoice for ai client',
+    });
+    assert.equal((lowercaseCustomerInvoice.executionResult as { type: string; toolName?: string }).type, 'structured_form');
+    assert.equal((lowercaseCustomerInvoice.executionResult as { toolName?: string }).toolName, 'create_invoice');
+
+    const companyNameInvoice = await aiAssistantService.sendMessage(assistantUser, customerInvoiceConversation.id, {
+      language: 'en',
+      content: 'Create an invoice for AI Client SARL',
+    });
+    assert.equal((companyNameInvoice.executionResult as { type: string; toolName?: string }).type, 'structured_form');
+    assert.equal((companyNameInvoice.executionResult as { toolName?: string }).toolName, 'create_invoice');
+    assert.match(companyNameInvoice.message.content, /AI Client/i);
+
+    const frenchCompanyInvoice = await aiAssistantService.sendMessage(assistantUser, customerInvoiceConversation.id, {
+      language: 'fr',
+      content: 'Créer une facture pour AI Client SARL',
+    });
+    assert.equal((frenchCompanyInvoice.executionResult as { type: string; toolName?: string }).type, 'structured_form');
+    assert.equal((frenchCompanyInvoice.executionResult as { toolName?: string }).toolName, 'create_invoice');
+
+    const whitespaceCompanyInvoice = await aiAssistantService.sendMessage(assistantUser, customerInvoiceConversation.id, {
+      language: 'en',
+      content: 'Create an invoice for   AI Client SARL   ',
+    });
+    assert.equal((whitespaceCompanyInvoice.executionResult as { type: string; toolName?: string }).type, 'structured_form');
+    assert.equal((whitespaceCompanyInvoice.executionResult as { toolName?: string }).toolName, 'create_invoice');
+
+    (aiAssistantService as any).classifySemanticIntent = async () => ({
+      response: 'Searching for client AI Client to prepare the invoice.',
+      intent: 'clients.read',
+      toolCall: { name: 'search_customers', input: { search: 'AI Client' } },
+      semanticIntent: { domain: 'clients', action: 'read', isWrite: false, needsClarification: false },
+    });
+    const semanticReadOverrideInvoice = await aiAssistantService.sendMessage(assistantUser, customerInvoiceConversation.id, {
+      language: 'en',
+      content: 'Create an invoice for AI Client SARL',
+    });
+    assert.equal((semanticReadOverrideInvoice.executionResult as { type: string; toolName?: string }).type, 'structured_form');
+    assert.equal((semanticReadOverrideInvoice.executionResult as { toolName?: string }).toolName, 'create_invoice');
+    (aiAssistantService as any).classifySemanticIntent = originalSemanticClassifier;
+
     const riskyCustomersIntent = await aiAssistantService.sendMessage(assistantUser, conversation.id, {
       language: 'en',
       content: 'Show risky customers',
@@ -454,7 +526,10 @@ async function main() {
       context: { entityType: 'contract', entityId: contract.id, readableReference: contract.contractNumber },
     });
     assert.equal((contextApprovedTimesheets.executionResult as { type: string; toolName?: string }).type, 'tool_result');
-    assert.equal((contextApprovedTimesheets.executionResult as { toolName?: string }).toolName, 'list_timesheets');
+    assert.match(
+      (contextApprovedTimesheets.executionResult as { toolName?: string }).toolName ?? '',
+      /^(list_timesheets|list_ready_to_invoice)$/
+    );
     assert.match(JSON.stringify(contextApprovedTimesheets.executionResult), /APPROVED/);
 
     const customerHealth = await aiAssistantService.executeTool(assistantUser, {
@@ -549,6 +624,170 @@ async function main() {
       context: { entityType: 'invoice', entityId: invoice.id, readableReference: invoice.invoiceNumber },
     });
     assert.match(JSON.stringify(contextPdfInfo.executionResult), /\/api\/invoices\/.+\/pdf/);
+
+    const invoiceDetail = await aiAssistantService.sendMessage(assistantUser, conversation.id, {
+      language: 'en',
+      content: `Show invoice ${invoice.invoiceNumber}`,
+    });
+    assert.equal((invoiceDetail.executionResult as { toolName?: string }).toolName, 'get_invoice_details');
+
+    const invoiceDetailUnderscore = await aiAssistantService.sendMessage(assistantUser, conversation.id, {
+      language: 'en',
+      content: `Show invoice ${invoice.invoiceNumber.replaceAll('-', '_')}`,
+    });
+    assert.equal((invoiceDetailUnderscore.executionResult as { toolName?: string }).toolName, 'get_invoice_details');
+
+    const invoiceDetailLowercase = await aiAssistantService.sendMessage(assistantUser, conversation.id, {
+      language: 'en',
+      content: `show invoice ${invoice.invoiceNumber.toLowerCase()}`,
+    });
+    assert.equal((invoiceDetailLowercase.executionResult as { toolName?: string }).toolName, 'get_invoice_details');
+
+    const invoicesListAfterDetail = await aiAssistantService.sendMessage(assistantUser, conversation.id, {
+      language: 'en',
+      content: 'Show invoices',
+    });
+    assert.equal((invoicesListAfterDetail.executionResult as { toolName?: string }).toolName, 'search_invoices');
+
+    const myContractsList = await aiAssistantService.sendMessage(assistantUser, conversation.id, {
+      language: 'en',
+      content: 'Show my contracts',
+    });
+    assert.equal((myContractsList.executionResult as { toolName?: string }).toolName, 'search_contracts');
+
+    const contractDetail = await aiAssistantService.sendMessage(assistantUser, conversation.id, {
+      language: 'en',
+      content: `Show contract ${contract.contractNumber}`,
+    });
+    assert.equal((contractDetail.executionResult as { toolName?: string }).toolName, 'get_contract_details');
+
+    const quoteConversation = await aiAssistantService.createConversation(assistantUser, { language: 'fr' });
+    const quotePending = await aiAssistantService.executeTool(assistantUser, {
+      conversationId: quoteConversation.id,
+      toolName: 'create_quote',
+      input: {
+        customerId: client.id,
+        issueDate: today(),
+        validUntil: futureDate(15),
+        currency: 'MAD',
+        taxRate: 20,
+        discount: 0,
+        notes: 'Devis IA de test',
+        terms: 'Paiement a 30 jours',
+        items: [
+          {
+            description: 'Prestation de conseil',
+            quantity: 1,
+            unitPrice: 1800,
+            taxRate: 20,
+          },
+        ],
+      },
+      idempotencyKey: `quote-${runId}`,
+    });
+    assert.equal((quotePending as { type: string }).type, 'pending_action');
+    const quoteAction = (quotePending as { action: { id: string } }).action;
+    const quoteConfirmed = await aiAssistantService.confirmAction(assistantUser, quoteAction.id);
+    assert.equal(['EXECUTED', 'COMPLETED'].includes(quoteConfirmed.action.status), true);
+    const createdQuote = (quoteConfirmed.result ?? {}) as { id: string; devisNumber: string };
+    assert.ok(createdQuote.id);
+    assert.match(createdQuote.devisNumber, /^DEV-/);
+
+    const quoteDetail = await aiAssistantService.sendMessage(assistantUser, quoteConversation.id, {
+      language: 'en',
+      content: `Show quote ${createdQuote.devisNumber}`,
+    });
+    assert.equal((quoteDetail.executionResult as { toolName?: string }).toolName, 'get_quote_details');
+
+    const quotePdf = await aiAssistantService.sendMessage(assistantUser, quoteConversation.id, {
+      language: 'en',
+      content: 'Generate its PDF',
+    });
+    assert.equal((quotePdf.executionResult as { type: string; toolName?: string }).type, 'tool_result');
+    assert.equal((quotePdf.executionResult as { toolName?: string }).toolName, 'generate_quote_pdf');
+    assert.match(JSON.stringify(quotePdf.executionResult), new RegExp(createdQuote.devisNumber));
+
+    const contextualQuotePdf = await aiAssistantService.sendMessage(assistantUser, quoteConversation.id, {
+      language: 'fr',
+      content: 'Genere le PDF de ce devis',
+      context: { entityType: 'quote', entityId: createdQuote.id, readableReference: createdQuote.devisNumber },
+    });
+    assert.equal((contextualQuotePdf.executionResult as { type: string; toolName?: string }).type, 'tool_result');
+    assert.equal((contextualQuotePdf.executionResult as { toolName?: string }).toolName, 'generate_quote_pdf');
+
+    const quoteEmail = await aiAssistantService.sendMessage(assistantUser, quoteConversation.id, {
+      language: 'en',
+      content: 'Send this quote by email',
+      context: { entityType: 'quote', entityId: createdQuote.id, readableReference: createdQuote.devisNumber },
+    });
+    assert.equal((quoteEmail.executionResult as { type: string }).type, 'pending_action');
+    const quoteEmailActionId = (quoteEmail.executionResult as { action?: { id?: string } }).action?.id;
+    assert.ok(quoteEmailActionId);
+    const quoteEmailAction = await prisma.aiPendingAction.findUniqueOrThrow({ where: { id: quoteEmailActionId! } });
+    assert.equal(quoteEmailAction.toolName, 'send_quote_email');
+    await aiAssistantService.cancelAction(assistantUser, quoteEmailActionId!);
+
+    const contractDraftPending = await aiAssistantService.executeTool(assistantUser, {
+      conversationId: quoteConversation.id,
+      toolName: 'create_contract',
+      input: {
+        clientId: client.id,
+        title: `AI minimal contract ${runId}`,
+        contractType: 'SERVICE',
+        language: 'fr',
+        startDate: today(),
+        endDate: futureDate(20),
+        renewalType: 'NONE',
+        amount: 0,
+        currency: 'MAD',
+        pricingType: ContractPricingType.HOURLY,
+        unitRate: 600,
+        fixedAmount: 0,
+        billingFrequency: ContractBillingFrequency.MONTHLY,
+        billingStartDate: '',
+        billingEndDate: null,
+        nextInvoiceDate: '',
+        lastInvoiceDate: null,
+        taxRate: 20,
+        paymentTermsDays: 30,
+        autoInvoiceEnabled: false,
+        prorationPolicy: ContractProrationPolicy.NONE,
+        content: 'Contrat IA minimal pour regression schema.',
+      },
+      idempotencyKey: `contract-minimal-${runId}`,
+    });
+    assert.equal((contractDraftPending as { type: string }).type, 'pending_action');
+    await aiAssistantService.cancelAction(assistantUser, (contractDraftPending as { action: { id: string } }).action.id);
+
+    const recurringDraftPending = await aiAssistantService.executeTool(assistantUser, {
+      conversationId: quoteConversation.id,
+      toolName: 'create_recurring_plan',
+      input: {
+        customerId: client.id,
+        name: `AI recurring ${runId}`,
+        frequency: 'MONTHLY',
+        intervalCount: 1,
+        startDate: today(),
+        endDate: '',
+        dueDays: 30,
+        autoSend: false,
+        currency: 'MAD',
+        discount: 0,
+        notes: 'Plan recurrent IA',
+        terms: 'Paiement a 30 jours',
+        items: [
+          {
+            description: 'Abonnement mensuel',
+            quantity: 1,
+            unitPrice: 950,
+            taxRate: 20,
+          },
+        ],
+      },
+      idempotencyKey: `recurring-minimal-${runId}`,
+    });
+    assert.equal((recurringDraftPending as { type: string }).type, 'pending_action');
+    await aiAssistantService.cancelAction(assistantUser, (recurringDraftPending as { action: { id: string } }).action.id);
 
     const cancelledPending = await aiAssistantService.executeTool(assistantUser, {
       conversationId: conversation.id,
@@ -654,9 +893,13 @@ async function main() {
       assert.ok(actionSet.has(action), `Missing audit action ${action}`);
     }
   } finally {
+    (aiAssistantService as any).classifySemanticIntent = originalSemanticClassifier;
+    env.OPENAI_API_KEY = originalOpenAiApiKey;
     await prisma.aiPendingAction.deleteMany({ where: { userId: admin.id } });
     await prisma.aiMessage.deleteMany({ where: { conversation: { userId: admin.id } } });
     await prisma.aiConversation.deleteMany({ where: { userId: admin.id } });
+    await prisma.devisItem.deleteMany({ where: { devis: { customerId: { in: [client.id, secondaryClient.id] } } } });
+    await prisma.devis.deleteMany({ where: { customerId: { in: [client.id, secondaryClient.id] } } });
     await prisma.contractEmailLog.deleteMany({ where: { contract: { clientId: { in: [client.id, secondaryClient.id] } } } });
     await prisma.contractAuditLog.deleteMany({ where: { contract: { clientId: { in: [client.id, secondaryClient.id] } } } });
     await prisma.contractSignatureLink.deleteMany({ where: { contract: { clientId: { in: [client.id, secondaryClient.id] } } } });

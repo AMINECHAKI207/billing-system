@@ -35,6 +35,19 @@
     "nativeFrench": "Français",
     "nativeArabic": "العربية"
   },
+  "telegram": {
+    "settings": {
+      "title": "Telegram Integration",
+      "description": "Connect your ERP account to Telegram to access the AI Assistant securely.",
+      "generating": "Generating...",
+      "connect": "Connect Telegram",
+      "secureCode": "Your secure linking code",
+      "validity": "Valid for 15 minutes.",
+      "sendCommand": "Send this command to the Telegram bot:",
+      "copyCommand": "Copy command",
+      "expiresAt": "Expires at:"
+    }
+  },
   "login": {
     "title": "Sign In",
     "secureWorkspace": "Secure workspace",
